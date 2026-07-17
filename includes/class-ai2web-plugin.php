@@ -251,6 +251,8 @@ final class Ai2Web_Plugin
                 'code_verifier' => isset($src['code_verifier']) ? sanitize_text_field(wp_unslash($src['code_verifier'])) : '',
                 'client_id' => isset($src['client_id']) ? sanitize_text_field(wp_unslash($src['client_id'])) : '',
             ];
+            header('Cache-Control: no-store'); // OAuth2: token responses must not be cached
+            header('Pragma: no-cache');
             $r = Ai2Web_OAuth::token($input);
             return $json($r['status'], $r['body']);
         }

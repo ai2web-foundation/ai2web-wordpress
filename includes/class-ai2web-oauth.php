@@ -67,6 +67,9 @@ final class Ai2Web_OAuth
      */
     public static function authorize(string $method): void
     {
+        if (!self::secure_context()) {
+            self::html_error(__('OAuth requires a secure (HTTPS) connection.', 'ai2web'));
+        }
         // phpcs:disable WordPress.Security.NonceVerification.Recommended -- OAuth params, validated below; consent POST is nonce-checked.
         $src = $method === 'POST' ? $_POST : $_GET;
         $get = static fn(string $k): string => isset($src[$k]) ? sanitize_text_field(wp_unslash($src[$k])) : '';
@@ -85,6 +88,12 @@ final class Ai2Web_OAuth
         }
         if ($client_id === '') {
             self::redirect_error($redirect_uri, 'invalid_request', 'missing client_id', $state);
+        }
+        // Optional hardening: a site owner can restrict which client_ids may request access.
+        // Empty (default) allows any client (dynamic public clients); a non-empty list is enforced.
+        $allowed = apply_filters('ai2web_oauth_allowed_clients', []);
+        if (is_array($allowed) && !empty($allowed) && !in_array($client_id, $allowed, true)) {
+            self::redirect_error($redirect_uri, 'unauthorized_client', 'client is not allowed', $state);
         }
         if ($response_type !== 'code') {
             self::redirect_error($redirect_uri, 'unsupported_response_type', 'only code is supported', $state);
@@ -141,6 +150,12 @@ final class Ai2Web_OAuth
      */
     public static function token(array $body): array
     {
+        if (!self::secure_context()) {
+            return ['status' => 400, 'body' => ['error' => 'invalid_request', 'error_description' => 'a secure (HTTPS) connection is required']];
+        }
+        if (!self::rate_ok()) {
+            return ['status' => 429, 'body' => ['error' => 'temporarily_unavailable', 'error_description' => 'too many token requests']];
+        }
         if ((string) ($body['grant_type'] ?? '') !== 'authorization_code') {
             return self::err('unsupported_grant_type', 'only authorization_code is supported');
         }
@@ -157,7 +172,11 @@ final class Ai2Web_OAuth
         if (!is_array($data)) {
             return self::err('invalid_grant', 'code is invalid or expired');
         }
-        delete_transient($key); // single use, even on failure below
+        // Single-use, race-safe: only the caller whose delete actually removes the code proceeds,
+        // so two concurrent requests cannot both redeem the same authorization code.
+        if (!delete_transient($key)) {
+            return self::err('invalid_grant', 'code has already been used');
+        }
 
         if (esc_url_raw($redirect_uri) !== (string) $data['redirect_uri'] || $client_id !== (string) $data['client_id']) {
             return self::err('invalid_grant', 'redirect_uri or client_id mismatch');
@@ -190,10 +209,46 @@ final class Ai2Web_OAuth
         return is_array($data) ? (int) ($data['user_id'] ?? 0) : 0;
     }
 
+    /**
+     * OAuth must run over TLS. Allow plain HTTP only for local/development hosts, so real
+     * production sites cannot issue codes or tokens in cleartext. Filterable for reverse-proxy
+     * setups where is_ssl() is unreliable.
+     */
+    private static function secure_context(): bool
+    {
+        if (is_ssl()) {
+            return true;
+        }
+        $env = function_exists('wp_get_environment_type') ? wp_get_environment_type() : 'production';
+        if (in_array($env, ['local', 'development'], true)) {
+            return true;
+        }
+        $host = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_HOST));
+        $is_local_host = in_array($host, ['localhost', '127.0.0.1', '::1'], true)
+            || (bool) preg_match('/\.(local|test|localhost)$/', $host);
+        return (bool) apply_filters('ai2web_oauth_allow_insecure', $is_local_host);
+    }
+
+    /** Per-IP throttle on the token endpoint (defence in depth; codes are already unguessable). */
+    private static function rate_ok(): bool
+    {
+        $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown';
+        $key = 'ai2web_oauth_rl_' . md5($ip);
+        $count = (int) get_transient($key);
+        if ($count >= 30) {
+            return false;
+        }
+        set_transient($key, $count + 1, 600); // 30 token requests / 10 min / IP
+        return true;
+    }
+
     private static function valid_redirect(string $uri): bool
     {
         $p = wp_parse_url($uri);
-        if (!$p || empty($p['scheme']) || empty($p['host']) || !empty($p['fragment'])) {
+        // Reject anything without a clear scheme+host, with a fragment, or with embedded
+        // credentials (https://legit.com@evil.com would otherwise resolve to evil.com).
+        if (!$p || empty($p['scheme']) || empty($p['host']) || !empty($p['fragment'])
+            || !empty($p['user']) || !empty($p['pass'])) {
             return false;
         }
         $scheme = strtolower((string) $p['scheme']);
@@ -241,6 +296,11 @@ final class Ai2Web_OAuth
         $user = wp_get_current_user();
         status_header(200);
         header('content-type: text/html; charset=utf-8');
+        // Prevent clickjacking of the Approve button, and stop the code_challenge/params leaking via Referer.
+        header('X-Frame-Options: DENY');
+        header("Content-Security-Policy: frame-ancestors 'none'");
+        header('Referrer-Policy: no-referrer');
+        nocache_headers();
         echo '<!doctype html><meta charset="utf-8"><title>' . esc_html__('Authorize access', 'ai2web') . '</title>';
         echo '<body style="font-family:system-ui;max-width:34rem;margin:4rem auto;padding:0 1rem;line-height:1.6">';
         echo '<h1>' . esc_html(sprintf(/* translators: %s: site name */ __('Authorize access to %s', 'ai2web'), get_bloginfo('name'))) . '</h1>';

@@ -80,7 +80,7 @@ add_filter('ai2web_manifest', function (array $manifest): array {
 
 - **Privacy:** the manifest and discovery endpoints expose public metadata only. Account and order specific actions require authentication and are approval-gated, so an agent cannot buy, refund or export data without the user approving first.
 - **`/.well-known/ai2w` returns 404?** On some nginx setups a `location ^~ /.well-known/` block serves that path directly and never reaches WordPress. Add a rule to pass `/.well-known/ai2w` to `index.php`, or serve it as a static pointer to `/ai2w`.
-- **`checkout missing` in the validator?** Declare it explicitly: `commerce: { enabled: true, checkout: true }`. The shorthand `commerce: true` does not assert checkout support.
+- **`checkout missing` in the validator?** Enable **Agent checkout** in Settings &rarr; AI2Web; the plugin then declares `commerce.checkout: true` for you. (Per RFC-0005, checkout must be asserted explicitly: the boolean `commerce: true` shorthand does not assert it.)
 
 See [`readme.txt`](readme.txt) for the WordPress.org listing (FAQ and changelog).
 

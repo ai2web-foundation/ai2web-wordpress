@@ -54,9 +54,17 @@ On WordPress 6.9+/7.0, AI2Web also registers its actions as native **WordPress A
 * `/ai2w` - the public, anonymous, open-protocol surface (ownership and approval gated).
 * WordPress Abilities - the authenticated WordPress-native surface, gated by WordPress's own auth.
 
+= Agent service =
+
+If you connect an AI provider in WordPress 7.0's Connectors hub, AI2Web exposes `/ai2w/agent`, a natural-language endpoint answered by WordPress's built-in AI Client using your provider. The plugin never handles an AI key.
+
+= OAuth2 (PKCE) =
+
+Agents can authenticate via an OAuth2 authorization-code + PKCE flow, where a logged-in user approves access on a consent screen. Codes are single-use and short-lived, tokens are stored hashed, PKCE uses S256, and the flow is served over HTTPS. Anonymous, ownership-gated access remains the fallback, so a token is never required. OAuth is a security-sensitive feature; review it for your threat model before relying on it, and it can be turned off on the settings page.
+
 = AI Readiness Score =
 
-A settings page (Settings -> AI2Web) shows a live **AI Readiness Score out of 100** and a compliance tier, lets you toggle each feature (MCP, WooCommerce actions, returns/refunds, agent checkout), and set a public support email.
+A settings page (Settings -> AI2Web) shows a live **AI Readiness Score out of 100** and a compliance tier, lets you toggle each feature (MCP, agent service, OAuth2, WooCommerce actions, returns/refunds, agent checkout), and set a public support email.
 
 = Safe by design =
 
@@ -81,6 +89,7 @@ Everything is generated from your live site and detected integrations, and the m
 * **Request only for money.** Refund and return actions add an order note for you to review and never call WooCommerce's refund process. Checkout creates a *pending* order and hands the customer a payment link; the agent never handles payment.
 * **Rate limited.** Order lookups, checkout and enquiries are throttled per IP.
 * The WordPress Abilities surface requires an authenticated WordPress user; it is gated by WordPress's own permissions.
+* **OAuth2 (PKCE)** is served over HTTPS, uses S256, issues single-use short-lived codes, stores tokens hashed, and only issues them after a logged-in user approves on a consent screen. A bearer token authenticates a request but does not elevate its WordPress capabilities.
 
 == Installation ==
 
@@ -117,13 +126,18 @@ Subdomain multisite works: each subsite serves its own manifest. Subdirectory mu
 = /.well-known/ai2w returns a 404 on my server =
 On Apache with the standard WordPress .htaccess, requests reach WordPress and the plugin serves the anchor. On some nginx setups a `location ^~ /.well-known/` block serves that path directly and never reaches WordPress; add a rule to pass `/.well-known/ai2w` to WordPress, or serve it as a static pointer to `/ai2w`.
 
+= How do I authenticate an agent (OAuth2)? =
+Enable OAuth2 (PKCE) on the settings page. An agent sends the user to `/ai2w/oauth/authorize`, the user approves on a consent screen, and the agent exchanges the code for a token at `/ai2w/oauth/token` (PKCE S256). The token is then sent as an `Authorization: Bearer` header. Anonymous, ownership-gated access still works without a token.
+
 = How do I customise the manifest? =
-Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2web_governance`, `ai2web_usage_policy`, `ai2web_legal` and `ai2web_knowledge` filters.
+Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2web_governance`, `ai2web_usage_policy`, `ai2web_legal`, `ai2web_knowledge`, `ai2web_oauth_allowed_clients` and `ai2web_oauth_allow_insecure` filters.
 
 == Changelog ==
 
 = 0.3.0 =
 * Manifest upgraded to AI2Web protocol v0.2 (additive, backward compatible): governance (rate limits and consent mode), a protective usage policy, opt-in legal fields, and knowledge sources. All filterable.
+* New **agent service** at `/ai2w/agent`, answered by WordPress 7.0's built-in AI Client using your connected provider (no AI key handled by the plugin).
+* New **OAuth2 (PKCE)** authenticated access: authorization-code + PKCE (S256) flow with a consent screen, single-use codes, hashed tokens and HTTPS enforcement. Anonymous, ownership-gated access remains the fallback.
 * New **agent checkout**: agents can assemble a cart into a pending order and receive a secure payment link. The customer pays in the browser; the agent never handles payment.
 * New multi-surface projections: serves `/llms.txt` and `/.well-known/agent.json` from the same manifest.
 * WordPress 7.0 **Abilities API** integration: registers the actions as native WordPress abilities (with AI annotations) so the built-in AI Client and MCP Adapter can use them.
