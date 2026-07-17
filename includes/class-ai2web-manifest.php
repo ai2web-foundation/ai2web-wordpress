@@ -30,14 +30,18 @@ final class Ai2Web_Manifest
             $transports['acp'] = ['enabled' => false, 'endpoint' => '/ai2w/acp']; // enable when an ACP connector is present
         }
 
-        $form_actions = Ai2Web_Forms::detect_actions();
-        if (!empty($form_actions)) {
+        if (Ai2Web_MCP::enabled()) {
+            $transports['mcp'] = ['enabled' => true, 'endpoint' => '/ai2w/mcp'];
+        }
+
+        $actions = Ai2Web_Actions::declared();
+        if (!empty($actions)) {
             $capabilities['actions'] = ['enabled' => true, 'endpoint' => '/ai2w/actions'];
         }
 
         $manifest = [
             'protocol' => 'ai2w',
-            'version' => '0.1',
+            'version' => '0.2',
             'site' => [
                 'name' => get_bloginfo('name'),
                 'url' => home_url(),
@@ -60,9 +64,18 @@ final class Ai2Web_Manifest
             $manifest['contact'] = ['support' => sanitize_email($support)];
         }
 
-        if (!empty($form_actions)) {
-            $manifest['actions'] = $form_actions;
-            $manifest['consent'] = ['requires_user_approval_for' => ['support_ticket']];
+        $approval = [];
+        if (!empty($actions)) {
+            $manifest['actions'] = $actions;
+            foreach ($actions as $a) {
+                if (!empty($a['requires_user_approval'])) {
+                    $approval[] = (string) $a['name'];
+                }
+            }
+            $approval = array_values(array_unique($approval));
+            if (!empty($approval)) {
+                $manifest['consent'] = ['requires_user_approval_for' => $approval];
+            }
         }
         if ($has_woo) {
             $manifest['events'] = [
@@ -71,6 +84,41 @@ final class Ai2Web_Manifest
                 'types' => Ai2Web_WooCommerce::event_types(),
             ];
         }
+
+        // v0.2 optional modules (additive; a minimal manifest stays valid without them).
+
+        // Governance: a default rate limit plus the consent mode derived from approval actions.
+        $consent_mode = [];
+        foreach ($approval as $name) {
+            $consent_mode[$name] = 'explicit';
+        }
+        $manifest['governance'] = apply_filters('ai2web_governance', [
+            'rate_limits' => ['requests' => 60, 'window_seconds' => 60],
+            'data_scope' => 'public_content' . ($has_woo ? '_and_own_orders' : ''),
+            // Cast so an empty consent map serialises as {} (an object), not [] (an array).
+            'consent_mode' => (object) $consent_mode,
+        ]);
+
+        // Usage policy: protective defaults; site owners can relax them via the filter.
+        $manifest['usage_policy'] = apply_filters('ai2web_usage_policy', [
+            'bulk_extraction' => false,
+            'model_training' => false,
+        ]);
+
+        // Legal is opt-in: we never assert a jurisdiction or compliance the owner has not declared.
+        $legal = apply_filters('ai2web_legal', []);
+        if (is_array($legal) && !empty($legal)) {
+            $manifest['legal'] = $legal;
+        }
+
+        // Knowledge: point agents at the structured content (and catalog) sources.
+        $knowledge = [
+            ['id' => 'content', 'name' => 'Site content', 'kind' => 'articles', 'ref' => '/ai2w/content', 'format' => 'json'],
+        ];
+        if ($has_woo) {
+            $knowledge[] = ['id' => 'catalog', 'name' => 'Product catalog', 'kind' => 'catalog', 'ref' => '/ai2w/products', 'format' => 'json'];
+        }
+        $manifest['knowledge'] = apply_filters('ai2web_knowledge', $knowledge);
 
         /**
          * Filter the generated manifest - themes/plugins can add capabilities, actions or x-* extensions.

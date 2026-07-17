@@ -1,0 +1,19 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  lint:
+    name: PHP lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ["8.0", "8.1", "8.2", "8.3"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+      - name: Lint all PHP files
+        run: find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 -P4 php -l

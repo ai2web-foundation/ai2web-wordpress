@@ -1,4 +1,15 @@
+<div align="center">
+  <a href="https://ai2web.dev">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ai2web-foundation/.github/main/profile/ai2web-logo-white.svg">
+      <img alt="AI2Web" src="https://raw.githubusercontent.com/ai2web-foundation/.github/main/profile/ai2web-logo-black.svg" width="200">
+    </picture>
+  </a>
+</div>
+
 # AI2Web for WordPress
+
+[![CI](https://github.com/ai2web-foundation/ai2web-wordpress/actions/workflows/ci.yml/badge.svg)](https://github.com/ai2web-foundation/ai2web-wordpress/actions/workflows/ci.yml)
 
 Make your WordPress site AI-native. This plugin publishes an [AI2Web](https://ai2web.dev) (`ai2w`) capability manifest and live, backend-first endpoints, so AI agents can **discover, understand and act on your site** across MCP, ACP, REST and more. It auto-integrates WooCommerce and popular form plugins, with no theme changes and no frontend scraping.
 
@@ -11,21 +22,31 @@ On activation the plugin serves:
 | Endpoint | Purpose |
 |---|---|
 | `/.well-known/ai2w` | The discovery anchor agents look for (required) |
-| `/ai2w` | Your site's AI2Web manifest: identity, capabilities, transports, events |
+| `/ai2w` | Your site's AI2Web manifest: identity, capabilities, transports, actions, events |
+| `/ai2w/mcp` | Model Context Protocol endpoint. Add it to Claude or ChatGPT connectors and your actions become tools |
 | `/ai2w/negotiate` | Capability negotiation |
 | `/ai2w/content`, `/ai2w/search` | Posts, pages and site search |
 | `/ai2w/products` | Product catalog (WooCommerce) |
 | `/ai2w/events` | Subscribable events (order, stock, price) |
-| `/ai2w/actions/*` | Declared, approval-gated actions (for example form submissions) |
-| `/ai2w/acp` | ACP checkout transport hook (WooCommerce) |
+| `/ai2w/actions/*` | Declared, approval-gated actions (product search, order tracking, returns, contact) |
 
 It is **backend-first and API-driven**: it does not scrape your frontend or depend on browser tools, and it complements MCP and ACP rather than replacing them.
 
 ## Auto-integrations
 
-- **WooCommerce** - products, stock, pricing and categories, plus order and stock events.
-- **Form plugins** - Contact Form 7, Gravity Forms, WPForms, Fluent Forms and Elementor Forms, exposed as approval-gated actions.
+- **WooCommerce** - product search and stock checks, order tracking (verified by billing email), and return/refund **requests** that are logged for you to action. Refunds are never processed automatically and no money is moved from the public endpoint.
+- **Form plugins** - Contact Form 7, Gravity Forms, WPForms, Fluent Forms and Elementor Forms, exposed as an approval-gated contact action that emails approved enquiries to your support address.
 - **Content** - posts, pages and search out of the box.
+
+## Settings and AI Readiness Score
+
+**Settings -> AI2Web** shows your live AI Readiness Score (computed locally, so it works on staging too), lists what is missing, and lets you toggle the endpoints, MCP, WooCommerce actions and returns, and set a public support email.
+
+## Security model
+
+- Order actions never trust an order number alone: the caller must also supply the billing email, and it must match the order, so agents cannot enumerate other customers' orders. Lookups are rate limited per IP.
+- Return and refund actions are **requests only**: they add an order note for you and never move money.
+- Approval-gated actions return a preview first and run only when called again with `confirm: true`.
 
 ## Install
 
@@ -41,10 +62,11 @@ Requires WordPress 6.0+ and PHP 8.0+.
 
 ## Configuration
 
-The plugin exposes only public metadata by default. Two filters let you customise it:
+Most settings live on the **Settings -> AI2Web** page. Developers can also use filters:
 
 ```php
-// Publish a public support contact (your admin email is never published by default)
+// Publish a public support contact (your admin email is never published by default).
+// The settings-page value takes precedence if set.
 add_filter('ai2web_support_contact', fn() => 'support@example.com');
 
 // Adjust the full manifest before it is served
