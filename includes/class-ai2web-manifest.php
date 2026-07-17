@@ -25,7 +25,7 @@ final class Ai2Web_Manifest
         ];
 
         if ($has_woo) {
-            $capabilities['commerce'] = ['enabled' => true, 'endpoint' => '/ai2w/products', 'checkout' => false, 'returns' => true];
+            $capabilities['commerce'] = ['enabled' => true, 'endpoint' => '/ai2w/products', 'checkout' => Ai2Web_Commerce::checkout_enabled(), 'returns' => true];
             $capabilities['events']   = ['enabled' => true, 'endpoint' => '/ai2w/events'];
             $transports['acp'] = ['enabled' => false, 'endpoint' => '/ai2w/acp']; // enable when an ACP connector is present
         }
@@ -54,7 +54,9 @@ final class Ai2Web_Manifest
             ],
             'capabilities' => $capabilities,
             'transports' => $transports,
-            'auth' => ['methods' => ['none']],
+            'auth' => Ai2Web_OAuth::available()
+                ? ['methods' => ['none', 'oauth2'], 'oauth2' => Ai2Web_OAuth::auth_block()]
+                : ['methods' => ['none']],
         ];
 
         // Support contact is OPT-IN: we do NOT publish admin_email to anonymous callers
@@ -119,6 +121,13 @@ final class Ai2Web_Manifest
             $knowledge[] = ['id' => 'catalog', 'name' => 'Product catalog', 'kind' => 'catalog', 'ref' => '/ai2w/products', 'format' => 'json'];
         }
         $manifest['knowledge'] = apply_filters('ai2web_knowledge', $knowledge);
+
+        // Agent service (A2A): a natural-language endpoint answered by WordPress 7.0's AI Client,
+        // available only when a provider is connected in the site's Connectors hub.
+        if (Ai2Web_Agent::available()) {
+            $manifest['agent_service'] = ['enabled' => true, 'endpoint' => '/ai2w/agent'];
+            $manifest['capabilities']['agent'] = ['enabled' => true, 'endpoint' => '/ai2w/agent'];
+        }
 
         /**
          * Filter the generated manifest - themes/plugins can add capabilities, actions or x-* extensions.

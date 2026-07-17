@@ -2,83 +2,145 @@
 Contributors: rolandfarkas, ai2webfoundation
 Tags: ai, agents, mcp, woocommerce, chatgpt
 Requires at least: 6.0
-Tested up to: 6.8
+Tested up to: 7.0
 Requires PHP: 8.0
 Stable tag: 0.3.0
 License: MIT
 
-Make your website AI-native. Expose an AI2Web (ai2w) manifest plus REST and MCP endpoints so AI agents can discover, understand and act on your site.
+Make your website AI-native. One open manifest plus REST and MCP endpoints so AI agents can discover, understand and safely act on your site.
 
 == Description ==
 
-Describe your website once. AI2Web makes it understandable to every AI.
+**Describe your website once. AI2Web makes it understandable to every AI.**
 
-AI2Web adds a vendor-neutral capability layer to your site. On activation it serves:
+AI agents are starting to use the web, but the web was built for human eyes. Agents scrape HTML, guess at forms, and render whole pages just to find one price or one button. AI2Web fixes that by publishing a single, structured description of what your site can do, and serving backend-first endpoints agents can call directly. No scraping, no per-vendor rebuild.
 
-* `/ai2w` - your site's AI2Web manifest (identity, capabilities, transports, actions, events)
+AI2Web is a vendor-neutral capability layer. It sits *above* protocols like MCP and ACP and speaks whichever one an assistant understands, rather than competing with them.
+
+= What it serves =
+
+On activation the plugin serves, from your own domain:
+
 * `/.well-known/ai2w` - the discovery anchor agents look for
-* `/ai2w/mcp` - a Model Context Protocol endpoint you can add to Claude or ChatGPT connectors, so an assistant can use your site's actions directly
-* `/ai2w/content`, `/ai2w/search`, `/ai2w/products`, `/ai2w/events`, `/ai2w/actions/*` - live, backend-first endpoints
-* `/ai2w/negotiate` - capability negotiation
+* `/ai2w` - your site's AI2Web manifest: identity, capabilities, transports, declared actions, events, governance
+* `/ai2w/mcp` - a Model Context Protocol endpoint. Add it to Claude, ChatGPT, Grok or any MCP client and your declared actions become tools the assistant can call
+* `/ai2w/content`, `/ai2w/search`, `/ai2w/products`, `/ai2w/events` - live, structured content and catalog
+* `/ai2w/actions/*` - the secure action endpoints
+* `/ai2w/negotiate` - capability negotiation (agree a capability set and transport)
+* `/llms.txt` - a plain-text summary and links, projected from the same manifest
+* `/.well-known/agent.json` - a generic agent-capability document, also projected from the manifest
 
-It auto-integrates:
+The last two mean agents that speak `llms.txt` or a generic `agent.json` can use your site without understanding AI2Web first, while `/ai2w` stays the authoritative source.
 
-* **WooCommerce** - product search and stock, order tracking (verified by billing email), and return/refund requests that are logged for you to action. It never issues a refund or moves money automatically.
-* **Form plugins** - Contact Form 7, Gravity Forms, WPForms, Fluent Forms, Elementor Forms, exposed as an approval-gated contact action.
-* **Content** - posts, pages, search.
+= WooCommerce =
 
-A settings page (Settings -> AI2Web) shows your live AI Readiness Score, lets you toggle features, and set a public support email.
+When WooCommerce is active, AI2Web exposes safe commerce actions:
 
-AI2Web is backend-first and API-driven. It does not scrape your frontend or rely on browser tools. It complements MCP and ACP rather than replacing them.
+* **search_products** - search the catalogue by keyword
+* **check_stock** - availability, price and stock by SKU or id
+* **track_order** - order status, verified by the billing email on the order
+* **check_return_status** - whether a return or refund request already exists
+* **start_return** / **request_refund** - request only. They log the request as an order note for you to action in WooCommerce and never issue a refund or move money automatically. Approval-gated.
+* **start_checkout** - an agent assembles a cart and the plugin creates a *pending* order, returning WooCommerce's own secure payment link for the customer to pay in the browser. The agent never handles payment details, and no money moves until the customer pays.
+
+= Contact forms =
+
+If Contact Form 7, Gravity Forms, WPForms, Fluent Forms or Elementor Forms is active, AI2Web exposes a single approval-gated **submit_contact** action. On confirmation the enquiry is emailed to your support address (never an arbitrary recipient, so it is not an open relay) and is rate limited per IP.
+
+= WordPress 7.0 AI: Abilities API =
+
+On WordPress 6.9+/7.0, AI2Web also registers its actions as native **WordPress Abilities**, with AI annotations (read vs. write, destructive). This exposes the same ownership-verified, approval-gated actions to WordPress's own AI Client and MCP Adapter, so a connected assistant can use them through WordPress too. Two surfaces, one definition:
+
+* `/ai2w` - the public, anonymous, open-protocol surface (ownership and approval gated).
+* WordPress Abilities - the authenticated WordPress-native surface, gated by WordPress's own auth.
+
+= AI Readiness Score =
+
+A settings page (Settings -> AI2Web) shows a live **AI Readiness Score out of 100** and a compliance tier, lets you toggle each feature (MCP, WooCommerce actions, returns/refunds, agent checkout), and set a public support email.
+
+= Safe by design =
+
+The most important part is what an agent *cannot* do without asking. See the security section below.
+
+AI2Web is backend-first and API-driven. It does not scrape your frontend or rely on browser tools.
+
+== How it works ==
+
+1. **Discovery.** An agent fetches `/.well-known/ai2w`, which points to `/ai2w`. Reading the manifest never changes anything.
+2. **Understanding.** The manifest declares your identity, capabilities, transports, and each action's input schema, risk level and whether it needs approval.
+3. **Negotiation.** The agent can `POST /ai2w/negotiate` to agree a capability set and a transport (REST or MCP).
+4. **Acting.** The agent calls an action over REST (`/ai2w/actions/{name}`) or as an MCP tool. Requests are validated against the declared schema. Sensitive actions return a preview and require explicit confirmation.
+
+Everything is generated from your live site and detected integrations, and the manifest is filterable so themes and plugins can extend it.
 
 == Privacy and security ==
 
-* The manifest and discovery endpoints expose only public metadata.
-* Order actions never trust an order number alone: the caller must also provide the billing email, and it must match the order, so agents cannot enumerate other customers' orders. Order lookups are rate limited.
-* Return and refund actions are requests only. They add a note to the order for you to review in WooCommerce and never process a refund or move money.
-* Your admin email is never published. A support contact appears in the manifest only if you set one on the settings page.
+* Discovery and the manifest expose only public metadata. Your admin email is never published; a support contact appears only if you set one.
+* **Ownership before private data.** Order actions never trust an order number alone. The caller must also provide the billing email, and it must match the order. A wrong email and a nonexistent order return the identical "not found" response, so agents cannot enumerate which orders exist.
+* **Approval before money or commitment.** Refunds, returns, checkout and contact enquiries return a preview first and only proceed on explicit confirmation.
+* **Request only for money.** Refund and return actions add an order note for you to review and never call WooCommerce's refund process. Checkout creates a *pending* order and hands the customer a payment link; the agent never handles payment.
+* **Rate limited.** Order lookups, checkout and enquiries are throttled per IP.
+* The WordPress Abilities surface requires an authenticated WordPress user; it is gated by WordPress's own permissions.
 
 == Installation ==
 
 1. Upload the `ai2web` folder to `/wp-content/plugins/`, or install the zip from Plugins -> Add New -> Upload.
 2. Activate the plugin.
 3. Make sure Permalinks are not set to "Plain" (Settings -> Permalinks).
-4. Visit Settings -> AI2Web to see your AI Readiness Score and options.
+4. Visit Settings -> AI2Web to see your AI Readiness Score and toggle features.
 5. Visit `https://your-site.com/ai2w` to see your manifest.
-6. To let an assistant use your store, add `https://your-site.com/ai2w/mcp` as a custom MCP connector.
+6. To let an assistant use your site, add `https://your-site.com/ai2w/mcp` as a custom MCP connector.
 
 == Frequently Asked Questions ==
 
 = Does this expose private customer data? =
-No. The manifest and discovery endpoints expose only public metadata. Order tracking requires the correct billing email for that order, lookups are rate limited, and return/refund actions only log a request for you, they never move money.
+No. The manifest and discovery endpoints expose only public metadata. Order tracking requires the correct billing email for that order, lookups are rate limited, and a wrong email is indistinguishable from a missing order, so nothing can be enumerated.
 
-= Can an AI issue a refund on my store? =
-No. Refund and return actions are requests. They add an order note for you to review and action in WooCommerce. The plugin never calls WooCommerce's refund process from the public endpoint.
+= Can an AI issue a refund or take payment on my store? =
+No. Refund and return actions only log a request as an order note for you to action in WooCommerce. Checkout creates a pending order and returns a secure payment link; the customer pays in the browser and the agent never handles payment details. No money moves without a human.
 
-= How do I connect this to Claude or ChatGPT? =
+= How do I connect this to Claude, ChatGPT or Grok? =
 Enable the MCP endpoint on the settings page (on by default), then add `https://your-site.com/ai2w/mcp` as a custom connector / MCP server in the assistant. Your declared actions appear as tools.
 
-= Do I need OpenAI/Anthropic to support AI2Web? =
-No. The manifest, feeds and endpoints are useful today, and the MCP endpoint works with current assistant connectors.
+= What is /llms.txt and /.well-known/agent.json? =
+They are alternative projections of the same manifest, for agents that read those formats. You do not maintain them separately; they are generated from `/ai2w`.
+
+= What are the WordPress Abilities it registers? =
+On WordPress 6.9+/7.0, the plugin registers its actions with the native Abilities API so WordPress's own AI Client and MCP Adapter can use them. This surface is authenticated (gated by WordPress permissions), separate from the public `/ai2w` surface.
+
+= Do I need OpenAI/Anthropic to use AI2Web? =
+No. The manifest, feeds and endpoints are useful today, and the MCP endpoint works with current assistant connectors without any AI key on your side.
+
+= Does it work with multisite? =
+Subdomain multisite works: each subsite serves its own manifest. Subdirectory multisite also works for `/ai2w` and its routes (the request path is resolved against each site's home URL); the domain-root `/.well-known/` anchor belongs to the network's main site, so subsites are discovered via `/ai2w` and the `<link rel="ai2w">` tag.
 
 = /.well-known/ai2w returns a 404 on my server =
-On Apache with the standard WordPress .htaccess, requests reach WordPress and the plugin serves the anchor. On some nginx setups a dedicated `location ^~ /.well-known/` block serves that path directly and never reaches WordPress. If so, add a rule to pass `/.well-known/ai2w` to WordPress (index.php), or serve it as a static pointer to `/ai2w`.
+On Apache with the standard WordPress .htaccess, requests reach WordPress and the plugin serves the anchor. On some nginx setups a `location ^~ /.well-known/` block serves that path directly and never reaches WordPress; add a rule to pass `/.well-known/ai2w` to WordPress, or serve it as a static pointer to `/ai2w`.
 
-= How do I add a support contact to the manifest? =
-Set it on the settings page (Settings -> AI2Web). Developers can also use the `ai2web_support_contact` filter.
+= How do I customise the manifest? =
+Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2web_governance`, `ai2web_usage_policy`, `ai2web_legal` and `ai2web_knowledge` filters.
 
 == Changelog ==
 
 = 0.3.0 =
-* Manifest upgraded to AI2Web protocol v0.2 (additive, backward compatible).
-* Adds governance (rate limits and consent mode), a protective usage policy, opt-in legal fields, and knowledge sources. All filterable: `ai2web_governance`, `ai2web_usage_policy`, `ai2web_legal`, `ai2web_knowledge`.
+* Manifest upgraded to AI2Web protocol v0.2 (additive, backward compatible): governance (rate limits and consent mode), a protective usage policy, opt-in legal fields, and knowledge sources. All filterable.
+* New **agent checkout**: agents can assemble a cart into a pending order and receive a secure payment link. The customer pays in the browser; the agent never handles payment.
+* New multi-surface projections: serves `/llms.txt` and `/.well-known/agent.json` from the same manifest.
+* WordPress 7.0 **Abilities API** integration: registers the actions as native WordPress abilities (with AI annotations) so the built-in AI Client and MCP Adapter can use them.
+* Added a `<link rel="ai2w">` discovery tag and a subdirectory / subdirectory-multisite path fix.
+* Admin now surfaces detected contact-form plugins.
 
 = 0.2.0 =
 * WooCommerce actions: product search, stock check, order tracking (billing-email verified), and return/refund requests (logged for the merchant, never auto-processed).
 * MCP endpoint at `/ai2w/mcp` exposing declared actions as tools for Claude / ChatGPT connectors.
 * Admin settings page with a live AI Readiness Score, feature toggles and a support-email field.
-* Contact action now delivers approved enquiries to your support address (rate limited).
+* Contact action delivers approved enquiries to your support address (rate limited).
 * Per-IP rate limiting on order lookups and enquiries.
 
 = 0.1.0 =
 * Initial draft: manifest, discovery, content/search/products/events, WooCommerce + form detection, negotiation.
+
+== Upgrade Notice ==
+
+= 0.3.0 =
+Adds agent checkout, llms.txt and agent.json surfaces, and WordPress 7.0 Abilities integration. Backward compatible; review Settings -> AI2Web to toggle the new agent checkout.

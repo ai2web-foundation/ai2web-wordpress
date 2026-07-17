@@ -110,9 +110,17 @@ final class Ai2Web_Admin
 
         self::checkbox_row($opt, 'mcp_enabled', !empty($s['mcp_enabled']), __('MCP endpoint', 'ai2web'), __('Expose /ai2w/mcp so AI assistants (Claude, ChatGPT connectors) can use your actions directly.', 'ai2web'));
 
+        self::checkbox_row($opt, 'agent_service', !empty($s['agent_service']), __('Agent service', 'ai2web'), __('Expose /ai2w/agent, a natural-language endpoint answered by WordPress\'s built-in AI Client using the provider you connected. It only appears in the manifest when a provider is available.', 'ai2web'));
+        if (!function_exists('wp_ai_client_prompt')) {
+            echo '<tr><th scope="row"></th><td><p class="description">' . esc_html__('The WordPress AI Client was not detected (needs WordPress 7.0+ with a connected provider), so the agent service is not exposed yet.', 'ai2web') . '</p></td></tr>';
+        }
+
+        self::checkbox_row($opt, 'oauth2', !empty($s['oauth2']), __('OAuth2 (PKCE)', 'ai2web'), __('Let agents authenticate via an OAuth2 authorization-code + PKCE flow, where a logged-in user approves access. Anonymous, ownership-gated access remains the fallback.', 'ai2web'));
+
         if ($has_woo) {
             self::checkbox_row($opt, 'commerce_actions', !empty($s['commerce_actions']), __('WooCommerce actions', 'ai2web'), __('Product search, stock checks and order tracking (order tracking is verified by billing email).', 'ai2web'));
             self::checkbox_row($opt, 'returns_refunds', !empty($s['returns_refunds']), __('Return / refund requests', 'ai2web'), __('Let agents log return and refund requests for you to action. Never issues a refund automatically.', 'ai2web'));
+            self::checkbox_row($opt, 'checkout', !empty($s['checkout']), __('Agent checkout', 'ai2web'), __('Let agents assemble a cart into a pending order and return a secure payment link. The customer pays in the browser; the agent never handles payment.', 'ai2web'));
         } else {
             echo '<tr><th scope="row">' . esc_html__('WooCommerce', 'ai2web') . '</th><td><p class="description">' . esc_html__('Not detected. Install WooCommerce to expose product, order and returns actions.', 'ai2web') . '</p></td></tr>';
         }

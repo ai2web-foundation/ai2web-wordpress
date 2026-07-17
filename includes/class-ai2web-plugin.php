@@ -42,6 +42,15 @@ final class Ai2Web_Plugin
      */
     private const MAX_BODY = 262144; // 256 KB request-body cap (DoS guard).
 
+    /** WordPress user id authenticated for this request via an OAuth2 bearer token (0 = anonymous). */
+    private static int $token_user_id = 0;
+
+    /** The user authenticated via OAuth2 bearer token for this request, or 0 if anonymous. */
+    public static function token_user_id(): int
+    {
+        return self::$token_user_id;
+    }
+
     public function maybe_handle(WP $wp): void
     {
         $uri = isset($_SERVER['REQUEST_URI']) ? sanitize_text_field(wp_unslash($_SERVER['REQUEST_URI'])) : '/';
@@ -60,6 +69,7 @@ final class Ai2Web_Plugin
             || $path === '/.well-known/agent.json'
             || $path === '/agent.json'
             || $path === '/llms.txt'
+            || $path === '/.well-known/oauth-authorization-server'
             || strncmp($path, '/ai2w/', 6) === 0;
         if (!$known) {
             return;
@@ -69,6 +79,16 @@ final class Ai2Web_Plugin
         }
 
         $method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper(sanitize_key(wp_unslash($_SERVER['REQUEST_METHOD']))) : 'GET';
+
+        // Authenticate via an AI2Web OAuth2 bearer token if one is presented. This is additive:
+        // requests without a token still work under the anonymous ownership + approval model.
+        // We record the authenticated user id but deliberately do NOT call wp_set_current_user():
+        // that would broaden the whole request to the token owner's capabilities. User-scoped
+        // actions should read self::token_user_id() and enforce their own per-resource checks.
+        $bearer = self::bearer_token();
+        if ($bearer !== '') {
+            self::$token_user_id = Ai2Web_OAuth::user_for_token($bearer);
+        }
 
         $body = null;
         if (in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
@@ -87,6 +107,15 @@ final class Ai2Web_Plugin
             }
             status_header(404);
             wp_send_json(['error' => ['code' => 'not_found', 'message' => 'MCP endpoint is disabled.']], 404);
+        }
+
+        // OAuth2 authorize endpoint: renders a consent screen or redirects, then exits.
+        if ($path === '/ai2w/oauth/authorize') {
+            if (Ai2Web_OAuth::available()) {
+                Ai2Web_OAuth::authorize($method);
+            }
+            status_header(404);
+            wp_send_json(['error' => ['code' => 'not_found', 'message' => 'OAuth is disabled.']], 404);
         }
 
         $manifest = Ai2Web_Manifest::build();
@@ -120,6 +149,25 @@ final class Ai2Web_Plugin
         wp_send_json($res['body'], $res['status']);
     }
 
+    /** Extract a Bearer token from the Authorization header (handles Apache's redirect variant). */
+    private static function bearer_token(): string
+    {
+        $header = '';
+        if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+            $header = (string) wp_unslash($_SERVER['HTTP_AUTHORIZATION']);
+        } elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+            $header = (string) wp_unslash($_SERVER['REDIRECT_HTTP_AUTHORIZATION']);
+        } elseif (function_exists('getallheaders')) {
+            foreach ((array) getallheaders() as $k => $v) {
+                if (strtolower((string) $k) === 'authorization') {
+                    $header = (string) $v;
+                    break;
+                }
+            }
+        }
+        return stripos($header, 'Bearer ') === 0 ? trim(substr($header, 7)) : '';
+    }
+
     /**
      * Minimal router mirroring Ai2Web\Server (kept self-contained so the plugin needs no Composer).
      *
@@ -142,6 +190,11 @@ final class Ai2Web_Plugin
         if ($path === '/.well-known/ai2w') {
             // Derive from the site's configured URL, never the request Host header (host-spoofing guard).
             return $json(200, ['ai2w' => home_url('/ai2w')]);
+        }
+        if ($path === '/.well-known/oauth-authorization-server') {
+            return Ai2Web_OAuth::available()
+                ? $json(200, Ai2Web_OAuth::metadata())
+                : $error(404, 'not_found', 'OAuth is not enabled.');
         }
         if ($path === '/.well-known/agent.json' || $path === '/agent.json') {
             if ($method !== 'GET') {
@@ -173,6 +226,33 @@ final class Ai2Web_Plugin
         }
         if ($path === '/ai2w/events') {
             return $json(200, ['types' => Ai2Web_WooCommerce::event_types()]);
+        }
+        if ($path === '/ai2w/agent') {
+            if ($method !== 'POST') {
+                return $error(405, 'invalid_request', 'Use POST with a query for the agent service.');
+            }
+            $r = Ai2Web_Agent::handle(is_array($body) ? $body : []);
+            return $json($r['status'], $r['body']);
+        }
+        if ($path === '/ai2w/oauth/token') {
+            if ($method !== 'POST') {
+                return $error(405, 'invalid_request', 'Use POST for the token endpoint.');
+            }
+            if (!Ai2Web_OAuth::available()) {
+                return $error(404, 'not_found', 'OAuth is not enabled.');
+            }
+            // Token endpoints are usually form-encoded; accept that or a JSON body.
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- OAuth token exchange is authenticated by the code + PKCE verifier, not a nonce.
+            $src = (is_array($body) && !empty($body)) ? $body : $_POST;
+            $input = [
+                'grant_type' => isset($src['grant_type']) ? sanitize_text_field(wp_unslash($src['grant_type'])) : '',
+                'code' => isset($src['code']) ? sanitize_text_field(wp_unslash($src['code'])) : '',
+                'redirect_uri' => isset($src['redirect_uri']) ? esc_url_raw(wp_unslash($src['redirect_uri'])) : '',
+                'code_verifier' => isset($src['code_verifier']) ? sanitize_text_field(wp_unslash($src['code_verifier'])) : '',
+                'client_id' => isset($src['client_id']) ? sanitize_text_field(wp_unslash($src['client_id'])) : '',
+            ];
+            $r = Ai2Web_OAuth::token($input);
+            return $json($r['status'], $r['body']);
         }
         if (preg_match('#^/ai2w/actions/([a-z0-9_-]+)$#i', $path, $mm)) {
             $name = str_replace('-', '_', strtolower($mm[1]));

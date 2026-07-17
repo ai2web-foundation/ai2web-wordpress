@@ -30,6 +30,11 @@ final class Ai2Web_Commerce
         return self::available() && Ai2Web_Settings::get('returns_refunds', true);
     }
 
+    public static function checkout_enabled(): bool
+    {
+        return self::available() && Ai2Web_Settings::get('checkout', true);
+    }
+
     /**
      * Declared action definitions for the manifest (and MCP tools).
      * @return array<int,array<string,mixed>>
@@ -102,6 +107,28 @@ final class Ai2Web_Commerce
             ];
         }
 
+        if (self::checkout_enabled()) {
+            $actions[] = [
+                'name' => 'start_checkout',
+                'description' => 'Assemble a cart and create a pending order, returning a secure payment link the customer opens to pay. The agent never handles payment; no money moves until the customer pays in the browser.',
+                'method' => 'POST', 'endpoint' => '/ai2w/actions/start-checkout',
+                'requires_auth' => false, 'requires_user_approval' => true, 'risk' => 'medium',
+                'input_schema' => ['type' => 'object', 'properties' => [
+                    'items' => [
+                        'type' => 'array',
+                        'description' => 'Line items to purchase.',
+                        'items' => ['type' => 'object', 'properties' => [
+                            'product_id' => ['type' => 'integer', 'description' => 'Product id.'],
+                            'sku' => ['type' => 'string', 'description' => 'Product SKU (alternative to product_id).'],
+                            'quantity' => ['type' => 'integer', 'description' => 'Quantity (default 1).'],
+                        ]],
+                    ],
+                    'email' => ['type' => 'string', 'description' => 'Optional customer email to attach to the order.'],
+                    'confirm' => ['type' => 'boolean', 'description' => 'Set true to create the order and return a pay link; omit for a preview.'],
+                ], 'required' => ['items']],
+            ];
+        }
+
         return $actions;
     }
 
@@ -136,6 +163,8 @@ final class Ai2Web_Commerce
                 return self::returns_enabled() ? self::return_or_refund($input, 'return') : self::err(404, 'unsupported_capability', "Unknown action '$name'.");
             case 'request_refund':
                 return self::returns_enabled() ? self::return_or_refund($input, 'refund') : self::err(404, 'unsupported_capability', "Unknown action '$name'.");
+            case 'start_checkout':
+                return self::checkout_enabled() ? self::start_checkout($input) : self::err(404, 'unsupported_capability', "Unknown action '$name'.");
         }
         return self::err(404, 'unsupported_capability', "Unknown action '$name'.");
     }
@@ -278,6 +307,104 @@ final class Ai2Web_Commerce
             'status' => 'requested',
             'reference' => $ref,
             'message' => __('Your request has been logged. The store will review it and be in touch.', 'ai2web'),
+        ]];
+    }
+
+    /**
+     * Assemble a cart into a pending order and return WooCommerce's own secure payment URL.
+     * Approval-gated: preview unless confirm:true. No payment is taken here; the customer pays
+     * in the browser via the returned link, so the agent never handles payment details.
+     *
+     * @param array<string,mixed> $input
+     * @return array{status:int,body:mixed}
+     */
+    private static function start_checkout(array $input): array
+    {
+        if (!self::rate_ok()) {
+            return self::err(429, 'rate_limited', 'Too many requests. Try again later.');
+        }
+        $items = isset($input['items']) && is_array($input['items']) ? $input['items'] : [];
+        if (empty($items)) {
+            return self::err(400, 'invalid_request', 'At least one item is required.');
+        }
+        if (count($items) > 20) {
+            return self::err(400, 'invalid_request', 'Too many line items (max 20).');
+        }
+
+        // Resolve and validate every line before creating anything.
+        $resolved = [];
+        $total = 0.0;
+        foreach ($items as $line) {
+            if (!is_array($line)) {
+                return self::err(400, 'invalid_request', 'Each item must be an object.');
+            }
+            $qty = isset($line['quantity']) ? absint($line['quantity']) : 1;
+            if ($qty < 1 || $qty > 100) {
+                return self::err(400, 'invalid_request', 'Quantity must be between 1 and 100.');
+            }
+            $product = null;
+            if (!empty($line['product_id'])) {
+                $product = wc_get_product(absint($line['product_id']));
+            } elseif (!empty($line['sku'])) {
+                $id = wc_get_product_id_by_sku(sanitize_text_field((string) $line['sku']));
+                $product = $id ? wc_get_product($id) : null;
+            }
+            if (!$product || $product->get_status() !== 'publish' || !$product->is_purchasable()) {
+                return self::err(404, 'not_found', 'A product could not be found or is not purchasable.');
+            }
+            if (!$product->has_enough_stock($qty)) {
+                return self::err(409, 'out_of_stock', sprintf('Not enough stock for %s.', $product->get_name()));
+            }
+            $line_total = (float) $product->get_price() * $qty;
+            $total += $line_total;
+            $resolved[] = ['product' => $product, 'qty' => $qty, 'line_total' => $line_total];
+        }
+
+        $currency = get_woocommerce_currency();
+        $summary = array_map(static fn(array $r): array => [
+            'product_id' => $r['product']->get_id(),
+            'title' => $r['product']->get_name(),
+            'quantity' => $r['qty'],
+            'line_total' => wc_format_decimal($r['line_total'], wc_get_price_decimals()),
+        ], $resolved);
+
+        // Approval gate: preview the cart unless confirmed.
+        if (empty($input['confirm']) || $input['confirm'] !== true) {
+            return ['status' => 200, 'body' => [
+                'preview' => true,
+                'action' => 'start_checkout',
+                'risk' => 'medium',
+                'message' => 'This will create a pending order and return a secure payment link. No payment is taken until the customer pays via the link. Resend with confirm:true to proceed.',
+                'items' => $summary,
+                'estimated_total' => wc_format_decimal($total, wc_get_price_decimals()),
+                'currency' => $currency,
+            ]];
+        }
+
+        // Confirmed: create the pending order. No payment is processed here.
+        $order = wc_create_order(['status' => 'pending', 'created_via' => 'ai2web']);
+        if (is_wp_error($order) || !$order instanceof WC_Order) {
+            return self::err(502, 'order_failed', 'The order could not be created. Please try again.');
+        }
+        foreach ($resolved as $r) {
+            $order->add_product($r['product'], $r['qty']);
+        }
+        $email = isset($input['email']) ? sanitize_email((string) $input['email']) : '';
+        if ($email !== '' && is_email($email)) {
+            $order->set_billing_email($email);
+        }
+        $order->calculate_totals();
+        $order->add_order_note(__('AI2Web: pending order created via an AI agent. Customer pays via the returned link.', 'ai2web'));
+        $order->save();
+
+        return ['status' => 200, 'body' => [
+            'action' => 'start_checkout',
+            'status' => 'pending_payment',
+            'order_id' => $order->get_order_number(),
+            'total' => $order->get_total(),
+            'currency' => $order->get_currency(),
+            'payment_url' => $order->get_checkout_payment_url(),
+            'message' => __('A pending order was created. Open the payment link to complete the purchase. No payment has been taken yet.', 'ai2web'),
         ]];
     }
 
