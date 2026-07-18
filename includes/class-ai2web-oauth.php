@@ -98,8 +98,15 @@ final class Ai2Web_OAuth
         if ($response_type !== 'code') {
             self::redirect_error($redirect_uri, 'unsupported_response_type', 'only code is supported', $state);
         }
-        if ($challenge === '' || $challenge_m !== 'S256') {
-            self::redirect_error($redirect_uri, 'invalid_request', 'PKCE with S256 is required', $state);
+        // S256 code_challenge is BASE64URL(SHA-256(verifier)): exactly 43 unpadded base64url chars.
+        if ($challenge_m !== 'S256' || !preg_match('/^[A-Za-z0-9\-_]{43}$/', $challenge)) {
+            self::redirect_error($redirect_uri, 'invalid_request', 'a valid S256 PKCE code_challenge is required', $state);
+        }
+        // Only scopes this server advertises may be requested (space-delimited per RFC 6749).
+        foreach (preg_split('/\s+/', trim($scope)) ?: [] as $requested) {
+            if ($requested !== '' && $requested !== self::SCOPE) {
+                self::redirect_error($redirect_uri, 'invalid_scope', 'requested scope is not supported', $state);
+            }
         }
 
         // A logged-in WordPress user must grant consent.
