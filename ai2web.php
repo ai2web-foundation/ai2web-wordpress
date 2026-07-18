@@ -31,6 +31,7 @@ require_once AI2WEB_DIR . 'includes/class-ai2web-mcp.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-oauth.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-agent.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-abilities.php';
+require_once AI2WEB_DIR . 'includes/class-ai2web-analytics.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-plugin.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-admin.php';
 
@@ -52,6 +53,7 @@ register_activation_hook(__FILE__, static function (): void {
     // Ensure our rewrite tag is present, then flush once.
     Ai2Web_Plugin::add_rewrite_rules();
     flush_rewrite_rules();
+    Ai2Web_Analytics::install();
 });
 
 register_deactivation_hook(__FILE__, 'flush_rewrite_rules');

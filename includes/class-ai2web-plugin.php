@@ -135,6 +135,9 @@ final class Ai2Web_Plugin
 
         $res = $this->route($manifest, $method, $path, $body);
 
+        // Analytics (RFC-0016): personal-data-free, server-side event per interaction. Local-first.
+        Ai2Web_Analytics::record_for($path, $method, is_array($body) ? $body : [], $res);
+
         // Emit CORS/custom headers; wp_send_json sets status + JSON content-type and exits.
         foreach ($res['headers'] as $k => $v) {
             if (stripos($k, 'content-type') === 0) {
