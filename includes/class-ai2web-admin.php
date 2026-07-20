@@ -122,7 +122,18 @@ final class Ai2Web_Admin
             self::checkbox_row($opt, 'returns_refunds', !empty($s['returns_refunds']), __('Return / refund requests', 'ai2web'), __('Let agents log return and refund requests for you to action. Never issues a refund automatically.', 'ai2web'));
             self::checkbox_row($opt, 'checkout', !empty($s['checkout']), __('Agent checkout', 'ai2web'), __('Let agents assemble a cart into a pending order and return a secure payment link. The customer pays in the browser; the agent never handles payment.', 'ai2web'));
             if (!empty($s['checkout'])) {
-                self::checkbox_row($opt, 'acp', !empty($s['acp']), __('ACP checkout (Agentic Commerce Protocol)', 'ai2web'), __('Expose ACP checkout sessions at /ai2w/acp/checkout_sessions and a product feed at /ai2w/acp/feed, so shopper agents (e.g. ChatGPT Instant Checkout) can run a full cart -> shipping -> coupon -> pay flow. Without a payment handler configured, completing a session returns a pending order and its secure pay link.', 'ai2web'));
+                self::checkbox_row($opt, 'acp', !empty($s['acp']), __('ACP checkout (Agentic Commerce Protocol)', 'ai2web'), __('Expose ACP checkout sessions at /ai2w/acp/checkout_sessions and a product feed at /ai2w/acp/feed, so shopper agents (e.g. ChatGPT Instant Checkout) can run a full cart -> shipping -> coupon -> pay flow.', 'ai2web'));
+                if (!empty($s['acp'])) {
+                    if (Ai2Web_Stripe::available()) {
+                        echo '<tr><th scope="row"></th><td><p class="description" style="color:#1f883d">'
+                            . esc_html__('In-agent charging is active: completing a checkout charges the buyer via a Stripe Shared Payment Token.', 'ai2web')
+                            . '</p></td></tr>';
+                    } else {
+                        echo '<tr><th scope="row"></th><td><p class="description">'
+                            . esc_html__('No Stripe key detected, so completing a checkout returns a pending order and its secure pay link (the customer pays in the browser). To charge in-agent, set an AI2WEB_STRIPE_SECRET_KEY constant in wp-config.php or configure the WooCommerce Stripe gateway.', 'ai2web')
+                            . '</p></td></tr>';
+                    }
+                }
             }
         } else {
             echo '<tr><th scope="row">' . esc_html__('WooCommerce', 'ai2web') . '</th><td><p class="description">' . esc_html__('Not detected. Install WooCommerce to expose product, order and returns actions.', 'ai2web') . '</p></td></tr>';

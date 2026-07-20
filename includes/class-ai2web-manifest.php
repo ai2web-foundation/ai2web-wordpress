@@ -37,6 +37,9 @@ final class Ai2Web_Manifest
                     'version' => Ai2Web_ACP::SPEC_VERSION,
                     'checkout_sessions' => '/ai2w/acp/checkout_sessions',
                     'feed' => '/ai2w/acp/feed',
+                    // How completion is paid: an agent can charge in-session with a delegated
+                    // payment token when a handler is configured, otherwise it gets a pay link.
+                    'payment' => Ai2Web_Stripe::available() ? 'delegated_token' : 'payment_link',
                 ];
             } else {
                 $transports['acp'] = ['enabled' => false, 'endpoint' => '/ai2w/acp'];

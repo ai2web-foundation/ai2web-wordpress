@@ -26,6 +26,7 @@ require_once AI2WEB_DIR . 'includes/class-ai2web-export.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-woocommerce.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-commerce.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-acp.php';
+require_once AI2WEB_DIR . 'includes/class-ai2web-stripe.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-forms.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-actions.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-mcp.php';
@@ -45,6 +46,7 @@ add_filter('ai2web_support_contact', static function ($value) {
 add_action('plugins_loaded', static function (): void {
     (new Ai2Web_Plugin())->boot();
     Ai2Web_Abilities::boot();
+    Ai2Web_Stripe::boot();
     if (is_admin()) {
         Ai2Web_Admin::boot();
     }
