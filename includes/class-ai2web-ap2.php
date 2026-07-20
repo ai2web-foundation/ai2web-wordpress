@@ -439,7 +439,7 @@ final class Ai2Web_AP2
             'iat' => $now,
             'exp' => $now + self::CART_TTL,
             'jti' => wp_generate_password(24, false, false),
-            'cart_hash' => self::b64url(hash('sha256', (string) wp_json_encode($contents), true)),
+            'cart_hash' => self::b64url(hash('sha256', self::canonical($contents), true)),
         ];
         $header = ['alg' => 'RS256', 'typ' => 'JWT', 'kid' => $keys['kid']];
         $signing_input = self::b64url((string) wp_json_encode($header)) . '.' . self::b64url((string) wp_json_encode($claims));
@@ -571,6 +571,81 @@ final class Ai2Web_AP2
     private static function b64url(string $bin): string
     {
         return rtrim(strtr(base64_encode($bin), '+/', '-_'), '=');
+    }
+
+    /**
+     * JCS (RFC 8785) canonicalisation, so a cart_hash computed here is byte-identical to the AI2Web
+     * SDKs (PHP/Python/Go/.NET/Ruby): object keys sorted, no whitespace, minimal string escaping,
+     * integers without a decimal point, currency amounts as a short decimal.
+     *
+     * @param mixed $data
+     */
+    private static function canonical($data): string
+    {
+        if ($data === null) {
+            return 'null';
+        }
+        if (is_bool($data)) {
+            return $data ? 'true' : 'false';
+        }
+        if (is_int($data)) {
+            return (string) $data;
+        }
+        if (is_float($data)) {
+            if (is_finite($data) && $data === floor($data) && abs($data) < 1e15) {
+                return (string) (int) $data;
+            }
+            return rtrim(rtrim(sprintf('%.2f', $data), '0'), '.');
+        }
+        if (is_string($data)) {
+            return self::jcs_string($data);
+        }
+        if ($data instanceof stdClass) {
+            $data = (array) $data;
+        }
+        if (is_array($data)) {
+            if (array_is_list($data)) {
+                return '[' . implode(',', array_map([self::class, 'canonical'], $data)) . ']';
+            }
+            $keys = array_map('strval', array_keys($data));
+            sort($keys, SORT_STRING);
+            $parts = [];
+            foreach ($keys as $k) {
+                $parts[] = self::jcs_string($k) . ':' . self::canonical($data[$k]);
+            }
+            return '{' . implode(',', $parts) . '}';
+        }
+        return 'null';
+    }
+
+    private static function jcs_string(string $s): string
+    {
+        $out = '"';
+        $len = strlen($s);
+        for ($i = 0; $i < $len; $i++) {
+            $c = $s[$i];
+            $o = ord($c);
+            if ($c === '"') {
+                $out .= '\\"';
+            } elseif ($c === '\\') {
+                $out .= '\\\\';
+            } elseif ($o === 0x08) {
+                $out .= '\\b';
+            } elseif ($o === 0x09) {
+                $out .= '\\t';
+            } elseif ($o === 0x0A) {
+                $out .= '\\n';
+            } elseif ($o === 0x0C) {
+                $out .= '\\f';
+            } elseif ($o === 0x0D) {
+                $out .= '\\r';
+            } elseif ($o < 0x20) {
+                $out .= sprintf('\\u%04x', $o);
+            } else {
+                $out .= $c;
+            }
+        }
+        return $out . '"';
     }
 
     /** @return array{status:int,body:mixed} */
