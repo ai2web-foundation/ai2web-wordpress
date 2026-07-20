@@ -70,6 +70,7 @@ final class Ai2Web_Plugin
             || $path === '/agent.json'
             || $path === '/llms.txt'
             || $path === '/.well-known/oauth-authorization-server'
+            || ($path === '/.well-known/agent-card.json' && Ai2Web_AP2::enabled())
             || strncmp($path, '/ai2w/', 6) === 0;
         if (!$known) {
             return;
@@ -206,6 +207,13 @@ final class Ai2Web_Plugin
                 return $error(405, 'invalid_request', 'Use GET for agent.json.');
             }
             return $json(200, Ai2Web_Export::agent_json($manifest));
+        }
+        // A2A agent-card discovery location, served when the AP2 surface is enabled.
+        if ($path === '/.well-known/agent-card.json') {
+            if (!Ai2Web_AP2::enabled()) {
+                return $error(404, 'not_found', 'No agent card.');
+            }
+            return $method === 'GET' ? $json(200, Ai2Web_AP2::agent_card()) : $error(405, 'invalid_request', 'Use GET for the agent card.');
         }
         if ($path === '/ai2w') {
             if ($method !== 'GET') {

@@ -89,19 +89,31 @@ final class Ai2Web_AP2
         if (is_array($intent)) {
             $r = self::build_cart_mandate($intent);
             $key = 'ap2.mandates.CartMandate';
+            $name = 'cart-mandate';
         } elseif (is_array($payment)) {
             $r = self::settle_payment($payment);
             $key = 'ap2.PaymentReceipt';
+            $name = 'payment-receipt';
         } else {
             return ['status' => 200, 'body' => self::rpc_error($id, -32602, 'No AP2 mandate DataPart found.')];
         }
+        // Return a proper A2A Task (message/send yields a Task with artifacts).
+        $context = isset($body['params']['message']['contextId']) && is_string($body['params']['message']['contextId'])
+            ? $body['params']['message']['contextId'] : 'ctx_' . wp_generate_password(16, false, false);
+        $ok = $r['status'] >= 200 && $r['status'] < 300;
         return ['status' => 200, 'body' => [
             'jsonrpc' => '2.0',
             'id' => $id,
             'result' => [
-                'kind' => 'message',
-                'role' => 'agent',
-                'parts' => [['kind' => 'data', 'data' => [$key => $r['body']]]],
+                'kind' => 'task',
+                'id' => 'task_' . wp_generate_password(20, false, false),
+                'contextId' => $context,
+                'status' => ['state' => $ok ? 'completed' : 'failed', 'timestamp' => gmdate('c')],
+                'artifacts' => [[
+                    'artifactId' => 'art_' . wp_generate_password(16, false, false),
+                    'name' => $name,
+                    'parts' => [['kind' => 'data', 'data' => [$key => $r['body']]]],
+                ]],
             ],
         ]];
     }
@@ -189,12 +201,12 @@ final class Ai2Web_AP2
             }
         }
 
-        // Resolve items: explicit SKUs first, else a catalogue search over the description.
-        $products = self::resolve_products($intent);
-        if (is_array($products) && isset($products['status'])) {
-            return $products; // error passthrough
+        // Resolve items: explicit items (with quantities), then SKUs, else a catalogue search.
+        $items = self::resolve_items($intent);
+        if (isset($items['status'])) {
+            return $items; // error passthrough
         }
-        if (empty($products)) {
+        if (empty($items)) {
             return self::err(404, 'no_match', 'No purchasable product matched the intent.');
         }
 
@@ -202,11 +214,14 @@ final class Ai2Web_AP2
         $display_items = [];
         $lines = [];
         $total = 0.0;
-        foreach ($products as $product) {
-            $price = (float) $product->get_price();
-            $display_items[] = ['label' => $product->get_name(), 'amount' => self::amount($price, $currency)];
-            $total += $price;
-            $lines[] = ['product_id' => $product->get_id(), 'qty' => 1];
+        foreach ($items as $item) {
+            $product = $item['product'];
+            $qty = $item['qty'];
+            $line_total = (float) $product->get_price() * $qty;
+            $label = $qty > 1 ? sprintf('%s x%d', $product->get_name(), $qty) : $product->get_name();
+            $display_items[] = ['label' => $label, 'amount' => self::amount($line_total, $currency)];
+            $total += $line_total;
+            $lines[] = ['product_id' => $product->get_id(), 'qty' => $qty];
         }
 
         $cart_id = 'cart_' . wp_generate_password(20, false, false);
@@ -249,20 +264,43 @@ final class Ai2Web_AP2
     }
 
     /**
+     * Resolve the intent to cart items with quantities. Precedence: an explicit `items` list
+     * (each {sku|product_id, quantity} - an AP2-compatible extension for multi-item/quantity
+     * carts), then `skus` (quantity 1 each), else a catalogue search over the description.
+     *
      * @param array<string,mixed> $intent
-     * @return array<int,WC_Product>|array{status:int,body:mixed} products, or an error array
+     * @return array<int,array{product:WC_Product,qty:int}>|array{status:int,body:mixed}
      */
-    private static function resolve_products(array $intent)
+    private static function resolve_items(array $intent)
     {
-        $skus = $intent['skus'] ?? null;
         $out = [];
+
+        $items = $intent['items'] ?? null;
+        if (is_array($items) && !empty($items)) {
+            foreach (array_slice($items, 0, self::MAX_ITEMS) as $it) {
+                if (!is_array($it)) {
+                    continue;
+                }
+                $ref = (string) ($it['sku'] ?? $it['product_id'] ?? '');
+                $qty = isset($it['quantity']) ? max(1, absint($it['quantity'])) : 1;
+                $product = self::resolve_one($ref);
+                if ($product === null) {
+                    return self::err(404, 'no_match', sprintf('Item "%s" is unavailable.', $ref));
+                }
+                $out[] = ['product' => $product, 'qty' => $qty];
+            }
+            if (empty($out)) {
+                return self::err(400, 'invalid_intent', 'No resolvable items.');
+            }
+            return $out;
+        }
+
+        $skus = $intent['skus'] ?? null;
         if (is_array($skus) && !empty($skus)) {
             foreach (array_slice($skus, 0, self::MAX_ITEMS) as $sku) {
-                $id = wc_get_product_id_by_sku(sanitize_text_field((string) $sku));
-                $product = $id ? wc_get_product($id) : null;
-                if ($product instanceof WC_Product && $product->get_status() === 'publish'
-                    && $product->is_purchasable() && !$product->is_type('variable')) {
-                    $out[] = $product;
+                $product = self::resolve_one((string) $sku);
+                if ($product !== null) {
+                    $out[] = ['product' => $product, 'qty' => 1];
                 }
             }
             if (empty($out)) {
@@ -273,16 +311,35 @@ final class Ai2Web_AP2
 
         $desc = isset($intent['natural_language_description']) ? sanitize_text_field((string) $intent['natural_language_description']) : '';
         if ($desc === '') {
-            return self::err(400, 'invalid_intent', 'The intent needs a natural_language_description or skus.');
+            return self::err(400, 'invalid_intent', 'The intent needs a natural_language_description, skus or items.');
         }
         $found = get_posts(['post_type' => 'product', 's' => $desc, 'numberposts' => 1, 'post_status' => 'publish']);
         foreach ($found as $post) {
-            $product = wc_get_product($post->ID);
-            if ($product instanceof WC_Product && $product->is_purchasable() && !$product->is_type('variable')) {
-                $out[] = $product;
+            $product = self::resolve_one((string) $post->ID);
+            if ($product !== null) {
+                $out[] = ['product' => $product, 'qty' => 1];
             }
         }
         return $out;
+    }
+
+    /** Resolve a numeric id or SKU to a purchasable, non-variable product, or null. */
+    private static function resolve_one(string $ref): ?WC_Product
+    {
+        $ref = trim($ref);
+        if ($ref === '') {
+            return null;
+        }
+        $product = ctype_digit($ref) ? wc_get_product((int) $ref) : null;
+        if (!$product instanceof WC_Product) {
+            $id = wc_get_product_id_by_sku($ref);
+            $product = $id ? wc_get_product($id) : null;
+        }
+        if (!$product instanceof WC_Product || $product->get_status() !== 'publish'
+            || !$product->is_purchasable() || $product->is_type('variable')) {
+            return null;
+        }
+        return $product;
     }
 
     // --- Core: settle a PaymentMandate ------------------------------------
