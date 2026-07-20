@@ -4,8 +4,9 @@ Tags: ai, agents, mcp, woocommerce, chatgpt
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 0.3.0
+Stable tag: 0.4.0
 License: MIT
+License URI: https://opensource.org/licenses/MIT
 
 Make your website AI-native. One open manifest plus REST and MCP endpoints so AI agents can discover, understand and safely act on your site.
 
@@ -134,6 +135,11 @@ Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2
 
 == Changelog ==
 
+= 0.4.0 =
+* New **analytics** (RFC-0016 parity with the reference server): personal-data-free, server-side interaction events stored in a local plugin table and fired as an `ai2web_event` action so operators can forward them anywhere. Records discovery, query, and action events, including query "misses" (the demand signal a read-only crawl cannot produce). Filters are sanitised to non-identifying scalars, the agent identity is coarse (User-Agent only, never an end-user), rows auto-prune after 90 days, and the whole thing is filterable off via `ai2web_analytics_enabled`.
+* **Hardened OAuth2 server**: least-privilege bearer authentication, so a token authenticates a request without elevating its WordPress capabilities.
+* **Strict PKCE and scope validation** on the authorize endpoint: the `code_challenge` and requested scopes are validated up front and rejected if malformed.
+
 = 0.3.0 =
 * Manifest upgraded to AI2Web protocol v0.2 (additive, backward compatible): governance (rate limits and consent mode), a protective usage policy, opt-in legal fields, and knowledge sources. All filterable.
 * New **agent service** at `/ai2w/agent`, answered by WordPress 7.0's built-in AI Client using your connected provider (no AI key handled by the plugin).
@@ -155,6 +161,9 @@ Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2
 * Initial draft: manifest, discovery, content/search/products/events, WooCommerce + form detection, negotiation.
 
 == Upgrade Notice ==
+
+= 0.4.0 =
+Adds privacy-preserving analytics (a new local events table, created on activation) and hardens the OAuth2 server with least-privilege bearer auth and strict PKCE/scope validation. Backward compatible.
 
 = 0.3.0 =
 Adds agent checkout, llms.txt and agent.json surfaces, and WordPress 7.0 Abilities integration. Backward compatible; review Settings -> AI2Web to toggle the new agent checkout.
