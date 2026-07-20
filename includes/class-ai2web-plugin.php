@@ -265,6 +265,23 @@ final class Ai2Web_Plugin
             $r = Ai2Web_Actions::run($name, $input);
             return $json($r['status'], $r['body']);
         }
+        // ACP (Agentic Commerce Protocol) product feed.
+        if ($path === '/ai2w/acp/feed') {
+            if ($method !== 'GET') {
+                return $error(405, 'invalid_request', 'Use GET for the ACP feed.');
+            }
+            if (!Ai2Web_ACP::enabled()) {
+                return $error(404, 'not_found', 'ACP checkout is not enabled.');
+            }
+            return $json(200, ['version' => Ai2Web_ACP::SPEC_VERSION, 'products' => Ai2Web_ACP::feed()]);
+        }
+        // ACP checkout sessions: /ai2w/acp/checkout_sessions[/{id}[/complete|/cancel]].
+        if (preg_match('#^/ai2w/acp/checkout_sessions(?:/([A-Za-z0-9_]+))?(?:/(complete|cancel))?$#', $path, $cm)) {
+            $id = ($cm[1] ?? '') !== '' ? $cm[1] : null;
+            $action = ($cm[2] ?? '') !== '' ? $cm[2] : null;
+            $r = Ai2Web_ACP::dispatch($method, $id, $action, is_array($body) ? $body : []);
+            return ['status' => $r['status'], 'headers' => array_merge(['content-type' => 'application/json; charset=utf-8'], $cors, $r['headers'] ?? []), 'body' => $r['body']];
+        }
         return $error(404, 'invalid_request', "No AI2Web route for $path.");
     }
 }

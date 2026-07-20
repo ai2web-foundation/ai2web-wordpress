@@ -99,7 +99,51 @@ final class Ai2Web_MCP
                 'inputSchema' => $schema,
             ];
         }
-        return $tools;
+        return array_merge($tools, self::acp_tools());
+    }
+
+    /**
+     * ACP checkout tools (spec mapping: the 5 checkout_session RPCs), so an MCP client can run a
+     * full agentic checkout. Present only when ACP checkout is enabled.
+     * @return array<int,array<string,mixed>>
+     */
+    private static function acp_tools(): array
+    {
+        if (!Ai2Web_ACP::enabled()) {
+            return [];
+        }
+        $sid = ['checkout_session_id' => ['type' => 'string', 'description' => 'The checkout session id.']];
+        $items = ['line_items' => ['type' => 'array', 'description' => 'Line items: each { id (product id or SKU), quantity }.', 'items' => ['type' => 'object']]];
+        $buyer = ['buyer' => ['type' => 'object', 'description' => 'Buyer { first_name, last_name, email }.']];
+        $fd = ['fulfillment_details' => ['type' => 'object', 'description' => 'Shipping details { name, address { line_one, city, state, country, postal_code } }.']];
+        $disc = ['discounts' => ['type' => 'object', 'description' => 'Discounts { codes: string[] } (coupon codes).']];
+        return [
+            [
+                'name' => 'create_checkout_session',
+                'description' => 'Start an agentic checkout: assemble a cart into a checkout session and get live pricing, shipping options and totals.',
+                'inputSchema' => ['type' => 'object', 'properties' => $items + $buyer + $fd + $disc + ['currency' => ['type' => 'string']], 'required' => ['line_items']],
+            ],
+            [
+                'name' => 'get_checkout_session',
+                'description' => 'Retrieve the current state of a checkout session.',
+                'inputSchema' => ['type' => 'object', 'properties' => $sid, 'required' => ['checkout_session_id']],
+            ],
+            [
+                'name' => 'update_checkout_session',
+                'description' => 'Update a checkout session: change items, set the shipping address, choose a delivery option, or apply a coupon.',
+                'inputSchema' => ['type' => 'object', 'properties' => $sid + $items + $fd + $disc + ['selected_fulfillment_options' => ['type' => 'array', 'items' => ['type' => 'object']]], 'required' => ['checkout_session_id']],
+            ],
+            [
+                'name' => 'complete_checkout_session',
+                'description' => 'Complete a checkout session. With a delegated payment token the order is paid; otherwise a pending order and its secure pay link are returned for the customer to pay in the browser.',
+                'inputSchema' => ['type' => 'object', 'properties' => $sid + $buyer + ['payment_data' => ['type' => 'object', 'description' => 'ACP payment_data with the delegated payment token.']], 'required' => ['checkout_session_id', 'buyer', 'payment_data']],
+            ],
+            [
+                'name' => 'cancel_checkout_session',
+                'description' => 'Cancel a checkout session.',
+                'inputSchema' => ['type' => 'object', 'properties' => $sid, 'required' => ['checkout_session_id']],
+            ],
+        ];
     }
 
     /** @param mixed $id @param mixed $params */
@@ -108,6 +152,17 @@ final class Ai2Web_MCP
         $params = is_array($params) ? $params : [];
         $name = isset($params['name']) ? (string) $params['name'] : '';
         $args = isset($params['arguments']) && is_array($params['arguments']) ? $params['arguments'] : [];
+
+        // ACP checkout tools route through the ACP session dispatcher.
+        if (self::is_acp_tool($name)) {
+            $r = self::run_acp_tool($name, $args);
+            $text = wp_json_encode($r['body'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+            self::result($id, [
+                'content' => [['type' => 'text', 'text' => $text === false ? '{}' : $text]],
+                'isError' => ($r['status'] ?? 200) >= 400,
+            ]);
+            return;
+        }
 
         if ($name === '' || !in_array($name, Ai2Web_Actions::names(), true)) {
             self::error($id, -32602, "Unknown tool: $name");
@@ -120,6 +175,41 @@ final class Ai2Web_MCP
             'content' => [['type' => 'text', 'text' => $text === false ? '{}' : $text]],
             'isError' => ($r['status'] ?? 200) >= 400,
         ]);
+    }
+
+    private static function is_acp_tool(string $name): bool
+    {
+        return in_array($name, [
+            'create_checkout_session', 'get_checkout_session', 'update_checkout_session',
+            'complete_checkout_session', 'cancel_checkout_session',
+        ], true);
+    }
+
+    /**
+     * Map an ACP checkout tool call onto the ACP session dispatcher.
+     * @param array<string,mixed> $args
+     * @return array{status:int,body:mixed}
+     */
+    private static function run_acp_tool(string $name, array $args): array
+    {
+        if (!Ai2Web_ACP::enabled()) {
+            return ['status' => 404, 'body' => ['error' => 'ACP checkout is not enabled.']];
+        }
+        $id = isset($args['checkout_session_id']) ? (string) $args['checkout_session_id'] : null;
+        unset($args['checkout_session_id']);
+        switch ($name) {
+            case 'create_checkout_session':
+                return Ai2Web_ACP::dispatch('POST', null, null, $args);
+            case 'get_checkout_session':
+                return Ai2Web_ACP::dispatch('GET', $id, null, []);
+            case 'update_checkout_session':
+                return Ai2Web_ACP::dispatch('POST', $id, null, $args);
+            case 'complete_checkout_session':
+                return Ai2Web_ACP::dispatch('POST', $id, 'complete', $args);
+            case 'cancel_checkout_session':
+                return Ai2Web_ACP::dispatch('POST', $id, 'cancel', []);
+        }
+        return ['status' => 404, 'body' => ['error' => "Unknown tool: $name"]];
     }
 
     private static function cors_headers(): void

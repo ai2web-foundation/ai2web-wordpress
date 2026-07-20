@@ -27,7 +27,20 @@ final class Ai2Web_Manifest
         if ($has_woo) {
             $capabilities['commerce'] = ['enabled' => true, 'endpoint' => '/ai2w/products', 'checkout' => Ai2Web_Commerce::checkout_enabled(), 'returns' => true];
             $capabilities['events']   = ['enabled' => true, 'endpoint' => '/ai2w/events'];
-            $transports['acp'] = ['enabled' => false, 'endpoint' => '/ai2w/acp']; // enable when an ACP connector is present
+            // ACP (Agentic Commerce Protocol) customer checkout, when enabled: a shopper's agent
+            // (e.g. ChatGPT Instant Checkout) drives a real WooCommerce cart to a paid order.
+            if (Ai2Web_ACP::enabled()) {
+                $capabilities['commerce']['checkout_session'] = '/ai2w/acp/checkout_sessions';
+                $capabilities['commerce']['feed'] = '/ai2w/acp/feed';
+                $transports['acp'] = [
+                    'enabled' => true,
+                    'version' => Ai2Web_ACP::SPEC_VERSION,
+                    'checkout_sessions' => '/ai2w/acp/checkout_sessions',
+                    'feed' => '/ai2w/acp/feed',
+                ];
+            } else {
+                $transports['acp'] = ['enabled' => false, 'endpoint' => '/ai2w/acp'];
+            }
         }
 
         if (Ai2Web_MCP::enabled()) {

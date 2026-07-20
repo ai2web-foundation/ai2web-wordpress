@@ -20,6 +20,7 @@ final class Ai2Web_Settings
             'commerce_actions' => true,  // product search, stock, order tracking (WooCommerce)
             'returns_refunds' => true,   // return/refund request actions (logged for the merchant)
             'checkout' => true,          // agent-assembled cart -> pending order + secure pay URL
+            'acp' => true,               // ACP (Agentic Commerce Protocol) customer checkout sessions + feed
             'agent_service' => true,     // /ai2w/agent, answered by WordPress 7.0's AI Client (if a provider is connected)
             'oauth2' => true,            // OAuth2 authorization-code + PKCE for authenticated agent access
             'mcp_enabled' => true,       // expose the /ai2w/mcp endpoint for AI connectors
@@ -53,6 +54,7 @@ final class Ai2Web_Settings
             'commerce_actions' => !empty($input['commerce_actions']),
             'returns_refunds' => !empty($input['returns_refunds']),
             'checkout' => !empty($input['checkout']),
+            'acp' => !empty($input['acp']),
             'agent_service' => !empty($input['agent_service']),
             'oauth2' => !empty($input['oauth2']),
             'mcp_enabled' => !empty($input['mcp_enabled']),

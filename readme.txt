@@ -33,6 +33,12 @@ On activation the plugin serves, from your own domain:
 
 The last two mean agents that speak `llms.txt` or a generic `agent.json` can use your site without understanding AI2Web first, while `/ai2w` stays the authoritative source.
 
+= Agentic checkout (ACP) =
+
+With WooCommerce active, AI2Web can expose an **Agentic Commerce Protocol (ACP) checkout** so a shopper's AI agent (for example ChatGPT Instant Checkout) can buy from your store. The agent drives a real WooCommerce cart through a checkout session at `/ai2w/acp/checkout_sessions` - adding items and a chosen variation, setting a shipping address, picking a delivery option, applying a coupon - and sees your live WooCommerce pricing, shipping rates and tax as it goes. A product feed at `/ai2w/acp/feed` lets agents ingest your catalogue. The same flow is available as MCP tools, so any MCP client can run it.
+
+Payment stays safe by design. Completing a session hands the store a delegated payment token; charging it runs through the `ai2web_acp_complete_payment` filter (wire it to your payment provider, e.g. a Stripe Shared Payment Token). With no handler configured, completion creates a pending order and returns that order's own secure payment link for the customer to pay in the browser, so the agent never handles card details. Turn it on under Settings -> AI2Web (it requires Agent checkout).
+
 = WooCommerce =
 
 When WooCommerce is active, AI2Web exposes safe commerce actions:
@@ -112,6 +118,9 @@ No. Refund and return actions only log a request as an order note for you to act
 = How do I connect this to Claude, ChatGPT or Grok? =
 Enable the MCP endpoint on the settings page (on by default), then add `https://your-site.com/ai2w/mcp` as a custom connector / MCP server in the assistant. Your declared actions appear as tools.
 
+= Can a shopper check out through an AI agent (ACP / ChatGPT Instant Checkout)? =
+Yes, if you enable ACP checkout (Settings -> AI2Web; it needs Agent checkout on). AI2Web implements the Agentic Commerce Protocol 2026-04-17 checkout sessions and a product feed, backed by a real WooCommerce cart, so a shopper's agent can assemble a cart, choose a variation, add a shipping address and coupon, and see live shipping and tax. To actually charge in-agent you connect a payment handler (via the `ai2web_acp_complete_payment` filter, e.g. a Stripe Shared Payment Token). Until you do, completing a checkout creates a pending order and returns its secure payment link for the customer to pay in the browser - the agent never handles card details.
+
 = What is /llms.txt and /.well-known/agent.json? =
 They are alternative projections of the same manifest, for agents that read those formats. You do not maintain them separately; they are generated from `/ai2w`.
 
@@ -139,6 +148,8 @@ Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2
 == Changelog ==
 
 = 0.4.0 =
+* New **ACP (Agentic Commerce Protocol) checkout** (spec 2026-04-17): a customer-facing agentic checkout so a shopper's agent (for example ChatGPT Instant Checkout) can run a full cart -> shipping -> coupon -> pay flow against a real WooCommerce cart. Adds checkout sessions at `/ai2w/acp/checkout_sessions` (create, retrieve, update, complete, cancel), a product feed at `/ai2w/acp/feed`, and the five matching MCP tools (create/get/update/complete/cancel_checkout_session). Live WooCommerce pricing, shipping rates, coupons and tax are projected as ACP totals in minor units. Payment completes through the `ai2web_acp_complete_payment` handler (e.g. a Stripe Shared Payment Token); with no handler configured it degrades safely to a pending order plus that order's secure pay link, so the agent never handles card data. Toggle under Settings -> AI2Web (requires Agent checkout).
+* **Richer product data**: product and variation detail for agents. `check_stock` and the catalogue now report product type, attributes (size/colour/etc.), and, for variable products, each purchasable variation with its own id, SKU, price, selecting attributes and stock, plus the price range. `start_checkout` accepts a `variation_id` (to buy a specific variant) and an optional `coupon` code.
 * New **analytics** (RFC-0016 parity with the reference server): personal-data-free, server-side interaction events stored in a local plugin table and fired as an `ai2web_event` action so operators can forward them anywhere. Records discovery, query, and action events, including query "misses" (the demand signal a read-only crawl cannot produce). Filters are sanitised to non-identifying scalars, the agent identity is coarse (User-Agent only, never an end-user), rows auto-prune after 90 days, and the whole thing is filterable off via `ai2web_analytics_enabled`.
 * **WooCommerce 10.9+ interop**: WooCommerce 10.9 ships its own canonical product/order abilities into WordPress's Abilities API and MCP Adapter. To avoid listing near-duplicates next to them on that authenticated, merchant-facing surface, AI2Web no longer registers its `search_products`, `check_stock`, or `track_order` reads as WordPress abilities when WooCommerce 10.9+ is active (WooCommerce's `products-query` / `orders-query` cover them). Every AI2Web action, including those three, remains fully available on the anonymous, ownership-gated `/ai2w/mcp` and REST surfaces, which WooCommerce's abilities do not provide. Filterable via `ai2web_abilities_superseded_by_woocommerce`.
 * **Hardened OAuth2 server**: least-privilege bearer authentication, so a token authenticates a request without elevating its WordPress capabilities.
@@ -167,7 +178,7 @@ Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2
 == Upgrade Notice ==
 
 = 0.4.0 =
-Adds privacy-preserving analytics (a new local events table, created on activation) and hardens the OAuth2 server with least-privilege bearer auth and strict PKCE/scope validation. Backward compatible.
+Adds ACP (Agentic Commerce Protocol) customer checkout so shopper agents can buy from your store, richer product/variation data, privacy-preserving analytics (a new local events table, created on activation), and hardens the OAuth2 server. Backward compatible; enable ACP checkout under Settings -> AI2Web.
 
 = 0.3.0 =
 Adds agent checkout, llms.txt and agent.json surfaces, and WordPress 7.0 Abilities integration. Backward compatible; review Settings -> AI2Web to toggle the new agent checkout.

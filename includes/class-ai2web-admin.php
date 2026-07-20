@@ -121,6 +121,9 @@ final class Ai2Web_Admin
             self::checkbox_row($opt, 'commerce_actions', !empty($s['commerce_actions']), __('WooCommerce actions', 'ai2web'), __('Product search, stock checks and order tracking (order tracking is verified by billing email).', 'ai2web'));
             self::checkbox_row($opt, 'returns_refunds', !empty($s['returns_refunds']), __('Return / refund requests', 'ai2web'), __('Let agents log return and refund requests for you to action. Never issues a refund automatically.', 'ai2web'));
             self::checkbox_row($opt, 'checkout', !empty($s['checkout']), __('Agent checkout', 'ai2web'), __('Let agents assemble a cart into a pending order and return a secure payment link. The customer pays in the browser; the agent never handles payment.', 'ai2web'));
+            if (!empty($s['checkout'])) {
+                self::checkbox_row($opt, 'acp', !empty($s['acp']), __('ACP checkout (Agentic Commerce Protocol)', 'ai2web'), __('Expose ACP checkout sessions at /ai2w/acp/checkout_sessions and a product feed at /ai2w/acp/feed, so shopper agents (e.g. ChatGPT Instant Checkout) can run a full cart -> shipping -> coupon -> pay flow. Without a payment handler configured, completing a session returns a pending order and its secure pay link.', 'ai2web'));
+            }
         } else {
             echo '<tr><th scope="row">' . esc_html__('WooCommerce', 'ai2web') . '</th><td><p class="description">' . esc_html__('Not detected. Install WooCommerce to expose product, order and returns actions.', 'ai2web') . '</p></td></tr>';
         }

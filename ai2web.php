@@ -25,6 +25,7 @@ require_once AI2WEB_DIR . 'includes/class-ai2web-manifest.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-export.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-woocommerce.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-commerce.php';
+require_once AI2WEB_DIR . 'includes/class-ai2web-acp.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-forms.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-actions.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-mcp.php';
