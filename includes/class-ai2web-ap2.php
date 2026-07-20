@@ -34,6 +34,8 @@ final class Ai2Web_AP2
     private const CART_PREFIX = 'ai2web_ap2_cart_';
     private const KEY_OPTION = 'ai2web_ap2_key';
     private const MAX_ITEMS = 20;
+    private const RATE_MAX = 30;      // cart-signings / settlements per window, per IP
+    private const RATE_WINDOW = 600;  // 10 minutes
 
     public static function enabled(): bool
     {
@@ -173,6 +175,10 @@ final class Ai2Web_AP2
     {
         if (!function_exists('wc_get_product')) {
             return self::err(404, 'unsupported', 'Commerce is not available.');
+        }
+        // Throttle per IP: each cart is an RSA signing operation, so cap anonymous CPU abuse.
+        if (!self::rate_ok()) {
+            return self::err(429, 'rate_limited', 'Too many requests. Try again later.');
         }
         // Honour intent_expiry.
         if (!empty($intent['intent_expiry'])) {
@@ -352,6 +358,9 @@ final class Ai2Web_AP2
     {
         $contents = isset($payment['payment_mandate_contents']) && is_array($payment['payment_mandate_contents'])
             ? $payment['payment_mandate_contents'] : [];
+        if (!self::rate_ok()) {
+            return self::err(429, 'rate_limited', 'Too many requests. Try again later.');
+        }
         $details_id = isset($contents['payment_details_id']) ? (string) $contents['payment_details_id'] : '';
         if ($details_id === '') {
             return self::err(400, 'invalid', 'payment_details_id is required.');
@@ -364,6 +373,11 @@ final class Ai2Web_AP2
         $claimed = $contents['payment_details_total']['amount']['value'] ?? null;
         if ($claimed !== null && abs((float) $claimed - (float) $cart['total']) > 0.001) {
             return self::err(409, 'total_mismatch', 'The payment total does not match the signed cart.');
+        }
+        // Claim the cart race-safely: only the caller whose delete actually removes the transient
+        // proceeds, so two concurrent settlements cannot both create an order for the same cart.
+        if (!delete_transient(self::CART_PREFIX . $details_id)) {
+            return self::err(409, 'already_settled', 'This cart has already been settled.');
         }
 
         $order = wc_create_order(['status' => 'pending', 'created_via' => 'ai2web-ap2']);
@@ -389,7 +403,6 @@ final class Ai2Web_AP2
         self::apply_contact_address($order, $pr['shipping_address'] ?? null);
         $order->update_meta_data('_ai2web_ap2_payment_mandate', (string) ($contents['payment_mandate_id'] ?? ''));
         $order->calculate_totals();
-        delete_transient(self::CART_PREFIX . $details_id);
 
         // Settlement seam. Default (no handler) leaves the order pending with a pay link.
         $settled = apply_filters('ai2web_ap2_settle_payment', null, $order, $payment);
@@ -566,6 +579,19 @@ final class Ai2Web_AP2
         }
         $parts = preg_split('/\s+/', $name, 2) ?: [$name];
         return [$parts[0], $parts[1] ?? ''];
+    }
+
+    /** Per-IP throttle for cart signing and settlement (anonymous flood / CPU-abuse guard). */
+    private static function rate_ok(): bool
+    {
+        $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown';
+        $key = 'ai2web_ap2_rl_' . md5($ip);
+        $count = (int) get_transient($key);
+        if ($count >= self::RATE_MAX) {
+            return false;
+        }
+        set_transient($key, $count + 1, self::RATE_WINDOW);
+        return true;
     }
 
     private static function b64url(string $bin): string

@@ -30,6 +30,8 @@ final class Ai2Web_ACP
     private const MAP_PREFIX  = 'ai2web_acp_sess_';   // transient: session_id -> order_id
     private const IDEM_PREFIX = 'ai2web_acp_idem_';   // transient: idempotency key -> session_id
     private const MAX_ITEMS   = 50;
+    private const RATE_MAX     = 30;                  // new checkout sessions per window, per IP
+    private const RATE_WINDOW  = 600;                 // 10 minutes
 
     /** ISO 4217 currencies with no minor unit (amounts are whole units, not cents). */
     private const ZERO_DECIMAL = ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'];
@@ -78,12 +80,18 @@ final class Ai2Web_ACP
     private static function create(array $body): array
     {
         // Idempotency: a repeated key returns the original session instead of a second order.
+        // Checked before the rate limit so a legitimate retry is never throttled.
         $idem = self::idempotency_key();
         if ($idem !== '') {
             $existing = get_transient(self::IDEM_PREFIX . md5($idem));
             if (is_string($existing) && ($order = self::order_for($existing)) !== null) {
                 return self::ok(200, self::build_session($order, $existing), $idem, true);
             }
+        }
+
+        // Throttle new-session creation per IP so anonymous callers cannot flood draft orders.
+        if (!self::rate_ok()) {
+            return self::err(429, 'rate_limited', 'Too many checkout sessions. Try again later.');
         }
 
         $lines = isset($body['line_items']) && is_array($body['line_items']) ? $body['line_items'] : [];
@@ -908,6 +916,19 @@ final class Ai2Web_ACP
     private static function idempotency_key(): string
     {
         return isset($_SERVER['HTTP_IDEMPOTENCY_KEY']) ? substr(sanitize_text_field(wp_unslash($_SERVER['HTTP_IDEMPOTENCY_KEY'])), 0, 255) : '';
+    }
+
+    /** Per-IP throttle for creating new checkout sessions (anonymous flood guard). */
+    private static function rate_ok(): bool
+    {
+        $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'unknown';
+        $key = 'ai2web_acp_rl_' . md5($ip);
+        $count = (int) get_transient($key);
+        if ($count >= self::RATE_MAX) {
+            return false;
+        }
+        set_transient($key, $count + 1, self::RATE_WINDOW);
+        return true;
     }
 
     /**
