@@ -156,6 +156,12 @@ Enable OAuth2 (PKCE) on the settings page. An agent sends the user to `/ai2w/oau
 = How do I customise the manifest? =
 Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2web_governance`, `ai2web_usage_policy`, `ai2web_legal`, `ai2web_knowledge`, `ai2web_oauth_allowed_clients` and `ai2web_oauth_allow_insecure` filters.
 
+== Screenshots ==
+
+1. The AI2Web settings page: a live AI Readiness Score and compliance tier, with links to your discovery manifest and MCP endpoint.
+2. Feature toggles: MCP, the agent service, OAuth2 (PKCE), WooCommerce actions, agent checkout, and the ACP and AP2 agentic-commerce surfaces.
+3. The Agent Sales dashboard: agent-driven revenue, orders by protocol (agent checkout, ACP, AP2) and engagement, computed entirely from local data.
+
 == Changelog ==
 
 = 0.4.0 =
