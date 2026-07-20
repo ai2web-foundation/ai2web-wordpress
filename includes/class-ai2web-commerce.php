@@ -119,10 +119,12 @@ final class Ai2Web_Commerce
                         'description' => 'Line items to purchase.',
                         'items' => ['type' => 'object', 'properties' => [
                             'product_id' => ['type' => 'integer', 'description' => 'Product id.'],
-                            'sku' => ['type' => 'string', 'description' => 'Product SKU (alternative to product_id).'],
+                            'variation_id' => ['type' => 'integer', 'description' => 'Variation id, for a variable product (required to buy a specific variant).'],
+                            'sku' => ['type' => 'string', 'description' => 'Product or variation SKU (alternative to product_id/variation_id).'],
                             'quantity' => ['type' => 'integer', 'description' => 'Quantity (default 1).'],
                         ]],
                     ],
+                    'coupon' => ['type' => 'string', 'description' => 'Optional coupon code to apply.'],
                     'email' => ['type' => 'string', 'description' => 'Optional customer email to attach to the order.'],
                     'confirm' => ['type' => 'boolean', 'description' => 'Set true to create the order and return a pay link; omit for a preview.'],
                 ], 'required' => ['items']],
@@ -205,7 +207,7 @@ final class Ai2Web_Commerce
         if (!$product || $product->get_status() !== 'publish') {
             return self::err(404, 'not_found', 'No published product matches that SKU or id.');
         }
-        return ['status' => 200, 'body' => self::product_summary($product) + [
+        return ['status' => 200, 'body' => self::product_summary($product, true) + [
             'stock_quantity' => $product->get_stock_quantity(),
             'backorders_allowed' => $product->backorders_allowed(),
         ]];
@@ -343,11 +345,17 @@ final class Ai2Web_Commerce
                 return self::err(400, 'invalid_request', 'Quantity must be between 1 and 100.');
             }
             $product = null;
-            if (!empty($line['product_id'])) {
+            if (!empty($line['variation_id'])) {
+                $product = wc_get_product(absint($line['variation_id']));
+            } elseif (!empty($line['product_id'])) {
                 $product = wc_get_product(absint($line['product_id']));
             } elseif (!empty($line['sku'])) {
                 $id = wc_get_product_id_by_sku(sanitize_text_field((string) $line['sku']));
                 $product = $id ? wc_get_product($id) : null;
+            }
+            // A variable parent is not itself purchasable: the agent must choose a variation.
+            if ($product && $product->is_type('variable')) {
+                return self::err(400, 'invalid_request', sprintf('Choose a variation for "%s" (pass its variation_id).', $product->get_name()));
             }
             if (!$product || $product->get_status() !== 'publish' || !$product->is_purchasable()) {
                 return self::err(404, 'not_found', 'A product could not be found or is not purchasable.');
@@ -368,17 +376,29 @@ final class Ai2Web_Commerce
             'line_total' => wc_format_decimal($r['line_total'], wc_get_price_decimals()),
         ], $resolved);
 
+        // Optional coupon: estimate its effect for the preview (the order recomputes it exactly).
+        $coupon_code = isset($input['coupon']) ? wc_format_coupon_code(sanitize_text_field((string) $input['coupon'])) : '';
+        $coupon_info = $coupon_code !== '' ? self::estimate_coupon($coupon_code, $total) : null;
+        $discount = $coupon_info['discount'] ?? 0.0;
+
         // Approval gate: preview the cart unless confirmed.
         if (empty($input['confirm']) || $input['confirm'] !== true) {
-            return ['status' => 200, 'body' => [
+            $body = [
                 'preview' => true,
                 'action' => 'start_checkout',
                 'risk' => 'medium',
                 'message' => 'This will create a pending order and return a secure payment link. No payment is taken until the customer pays via the link. Resend with confirm:true to proceed.',
                 'items' => $summary,
-                'estimated_total' => wc_format_decimal($total, wc_get_price_decimals()),
+                'estimated_total' => wc_format_decimal(max(0.0, $total - $discount), wc_get_price_decimals()),
                 'currency' => $currency,
-            ]];
+            ];
+            if ($coupon_info !== null) {
+                $body['coupon'] = ['code' => $coupon_code, 'valid' => $coupon_info['valid'], 'estimated_discount' => wc_format_decimal($discount, wc_get_price_decimals())];
+                if (!$coupon_info['valid']) {
+                    $body['coupon']['message'] = $coupon_info['message'];
+                }
+            }
+            return ['status' => 200, 'body' => $body];
         }
 
         // Confirmed: create the pending order. No payment is processed here.
@@ -392,6 +412,13 @@ final class Ai2Web_Commerce
         $email = isset($input['email']) ? sanitize_email((string) $input['email']) : '';
         if ($email !== '' && is_email($email)) {
             $order->set_billing_email($email);
+        }
+        // Apply the coupon on the real order so WooCommerce validates limits/eligibility exactly.
+        if ($coupon_code !== '') {
+            $applied = $order->apply_coupon($coupon_code);
+            if (is_wp_error($applied)) {
+                return self::err(400, 'invalid_coupon', $applied->get_error_message());
+            }
         }
         $order->calculate_totals();
         $order->add_order_note(__('AI2Web: pending order created via an AI agent. Customer pays via the returned link.', 'ai2web'));
@@ -438,10 +465,15 @@ final class Ai2Web_Commerce
         return $order;
     }
 
-    /** @param WC_Product $product @return array<string,mixed> */
-    private static function product_summary($product): array
+    /**
+     * @param WC_Product $product
+     * @param bool $deep When true, expand a variable product's full variation list (used for a
+     *                    single-product lookup; kept off in list responses to bound payload size).
+     * @return array<string,mixed>
+     */
+    private static function product_summary($product, bool $deep = false): array
     {
-        return [
+        $summary = [
             'id' => $product->get_id(),
             'sku' => $product->get_sku(),
             'title' => $product->get_name(),
@@ -449,7 +481,142 @@ final class Ai2Web_Commerce
             'price' => $product->get_price(),
             'currency' => get_woocommerce_currency(),
             'availability' => $product->is_in_stock() ? 'in_stock' : 'out_of_stock',
+            'type' => $product->get_type(),
         ];
+
+        if ($product->is_type('variation')) {
+            // A specific variation: report its parent and the attribute values that select it.
+            $summary['parent_id'] = $product->get_parent_id();
+            $summary['variation_attributes'] = self::variation_attribute_pairs($product);
+            return $summary;
+        }
+
+        $attributes = self::attributes_of($product);
+        if ($attributes) {
+            $summary['attributes'] = $attributes;
+        }
+
+        if ($product->is_type('variable')) {
+            $variations = self::variations_of($product);
+            $summary['variation_count'] = count($variations);
+            $summary['price_min'] = $product->get_variation_price('min');
+            $summary['price_max'] = $product->get_variation_price('max');
+            if ($deep) {
+                $summary['variations'] = $variations;
+            }
+        }
+
+        return $summary;
+    }
+
+    /**
+     * Product attributes (name + options), so an agent can reason about size/colour/etc. before
+     * choosing a variation. `variation` marks attributes that actually distinguish variations.
+     *
+     * @param WC_Product $product
+     * @return array<int,array<string,mixed>>
+     */
+    private static function attributes_of($product): array
+    {
+        $out = [];
+        foreach ($product->get_attributes() as $attr) {
+            if (!$attr instanceof WC_Product_Attribute) {
+                continue;
+            }
+            $options = $attr->is_taxonomy()
+                ? wc_get_product_terms($product->get_id(), $attr->get_name(), ['fields' => 'names'])
+                : $attr->get_options();
+            $out[] = [
+                'name' => wc_attribute_label($attr->get_name()),
+                'options' => array_values(is_array($options) ? $options : []),
+                'variation' => (bool) $attr->get_variation(),
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Purchasable variations of a variable product (capped), each with its own id, SKU, price,
+     * selecting attributes and stock, so an agent can pick and buy a specific variant.
+     *
+     * @param WC_Product $product
+     * @return array<int,array<string,mixed>>
+     */
+    private static function variations_of($product): array
+    {
+        $out = [];
+        foreach ($product->get_children() as $vid) {
+            if (count($out) >= 50) {
+                break;
+            }
+            $v = wc_get_product($vid);
+            if (!$v instanceof WC_Product_Variation || $v->get_status() !== 'publish') {
+                continue;
+            }
+            $out[] = [
+                'variation_id' => $v->get_id(),
+                'sku' => $v->get_sku(),
+                'price' => $v->get_price(),
+                'attributes' => self::variation_attribute_pairs($v),
+                'availability' => $v->is_in_stock() ? 'in_stock' : 'out_of_stock',
+                'stock' => $v->get_stock_quantity(),
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Flatten a variation's selecting attributes (e.g. attribute_pa_color => blue) into readable
+     * name/value pairs.
+     *
+     * @param WC_Product_Variation $variation
+     * @return array<int,array<string,string>>
+     */
+    private static function variation_attribute_pairs($variation): array
+    {
+        $out = [];
+        foreach ($variation->get_variation_attributes() as $key => $value) {
+            if ($value === '') {
+                continue; // "any" attribute - not a fixed selector
+            }
+            $taxonomy = str_replace('attribute_', '', (string) $key);
+            $label = wc_attribute_label($taxonomy);
+            // For taxonomy attributes the value is a term slug; resolve to its display name.
+            if (taxonomy_exists($taxonomy)) {
+                $term = get_term_by('slug', $value, $taxonomy);
+                if ($term && !is_wp_error($term)) {
+                    $value = $term->name;
+                }
+            }
+            $out[] = ['name' => $label, 'value' => (string) $value];
+        }
+        return $out;
+    }
+
+    /**
+     * Rough preview of a coupon's effect on a cart subtotal. WooCommerce recomputes the exact
+     * discount (respecting limits, product scope and eligibility) when the coupon is applied to
+     * the order on confirmation; this only powers the preview estimate.
+     *
+     * @return array{valid:bool,discount:float,message:string}
+     */
+    private static function estimate_coupon(string $code, float $subtotal): array
+    {
+        if (!class_exists('WC_Coupon')) {
+            return ['valid' => false, 'discount' => 0.0, 'message' => 'Coupons are unavailable.'];
+        }
+        $coupon = new WC_Coupon($code);
+        if (!$coupon->get_id()) {
+            return ['valid' => false, 'discount' => 0.0, 'message' => 'No such coupon.'];
+        }
+        $amount = (float) $coupon->get_amount();
+        $discount = 0.0;
+        if ($coupon->is_type(['percent'])) {
+            $discount = $subtotal * $amount / 100;
+        } elseif ($coupon->is_type(['fixed_cart', 'fixed_product'])) {
+            $discount = min($amount, $subtotal);
+        }
+        return ['valid' => true, 'discount' => round($discount, wc_get_price_decimals()), 'message' => ''];
     }
 
     /** Simple per-IP throttle for order lookups. */
