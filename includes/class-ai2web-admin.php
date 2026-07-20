@@ -92,7 +92,11 @@ final class Ai2Web_Admin
             echo ' &nbsp;&middot;&nbsp; ' . esc_html__('MCP endpoint:', 'ai2web') . ' <code>' . esc_html($mcp) . '</code>';
         }
         echo '</p>';
-        echo '<p><a class="button" href="' . esc_url('https://ai2web.dev/validator?url=' . rawurlencode(home_url('/'))) . '" target="_blank" rel="noopener">' . esc_html__('Open in the AI2Web Validator', 'ai2web') . '</a></p>';
+        echo '<p><a class="button" href="' . esc_url('https://ai2web.dev/validator?url=' . rawurlencode(home_url('/'))) . '" target="_blank" rel="noopener">' . esc_html__('Open in the AI2Web Validator', 'ai2web') . '</a>';
+        if ($has_woo && current_user_can('manage_woocommerce')) {
+            echo ' <a class="button button-primary" href="' . esc_url(admin_url('options-general.php?page=ai2web-sales')) . '">' . esc_html__('View Agent Sales', 'ai2web') . '</a>';
+        }
+        echo '</p>';
         echo '</div>';
 
         // Settings form.

@@ -37,6 +37,7 @@ require_once AI2WEB_DIR . 'includes/class-ai2web-abilities.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-analytics.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-plugin.php';
 require_once AI2WEB_DIR . 'includes/class-ai2web-admin.php';
+require_once AI2WEB_DIR . 'includes/class-ai2web-dashboard.php';
 
 // Publish the configured support email in the manifest (opt-in via settings).
 add_filter('ai2web_support_contact', static function ($value) {
@@ -50,6 +51,7 @@ add_action('plugins_loaded', static function (): void {
     Ai2Web_Stripe::boot();
     if (is_admin()) {
         Ai2Web_Admin::boot();
+        Ai2Web_Dashboard::boot();
     }
 });
 
