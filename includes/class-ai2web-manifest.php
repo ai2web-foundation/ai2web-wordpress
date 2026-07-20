@@ -44,6 +44,19 @@ final class Ai2Web_Manifest
             } else {
                 $transports['acp'] = ['enabled' => false, 'endpoint' => '/ai2w/acp'];
             }
+            // AP2 (Agent Payments Protocol, Google): merchant signs a Cart Mandate for a buyer's
+            // agent, then settles a user-signed Payment Mandate. Opt-in (needs a signing key).
+            if (Ai2Web_AP2::enabled()) {
+                $transports['ap2'] = [
+                    'enabled' => true,
+                    'version' => Ai2Web_AP2::VERSION,
+                    'extension' => Ai2Web_AP2::EXTENSION_URI,
+                    'agent_card' => '/ai2w/ap2/agent-card',
+                    'cart' => '/ai2w/ap2/cart',
+                    'payment' => '/ai2w/ap2/payment',
+                    'jwks' => '/ai2w/ap2/jwks',
+                ];
+            }
         }
 
         if (Ai2Web_MCP::enabled()) {

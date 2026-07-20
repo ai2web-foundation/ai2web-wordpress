@@ -134,6 +134,12 @@ final class Ai2Web_Admin
                             . '</p></td></tr>';
                     }
                 }
+                self::checkbox_row($opt, 'ap2', !empty($s['ap2']), __('AP2 (Agent Payments Protocol)', 'ai2web'), __('Also expose a Google AP2 merchant surface at /ai2w/ap2: the store returns a merchant-signed Cart Mandate for a buyer agent\'s Intent Mandate, and settles a Payment Mandate. Opt-in; it generates an RSA signing key (published as a JWKS) on first use.', 'ai2web'));
+                if (!empty($s['ap2']) && !function_exists('openssl_sign')) {
+                    echo '<tr><th scope="row"></th><td><p class="description" style="color:#bf8700">'
+                        . esc_html__('PHP OpenSSL is not available, so AP2 cannot sign Cart Mandates and stays inactive. Enable the PHP openssl extension.', 'ai2web')
+                        . '</p></td></tr>';
+                }
             }
         } else {
             echo '<tr><th scope="row">' . esc_html__('WooCommerce', 'ai2web') . '</th><td><p class="description">' . esc_html__('Not detected. Install WooCommerce to expose product, order and returns actions.', 'ai2web') . '</p></td></tr>';

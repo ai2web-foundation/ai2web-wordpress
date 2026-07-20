@@ -186,6 +186,8 @@ final class Ai2Web_Plugin
         ];
         $json = static fn(int $s, mixed $b): array => ['status' => $s, 'headers' => array_merge(['content-type' => 'application/json; charset=utf-8'], $cors), 'body' => $b];
         $error = static fn(int $s, string $c, string $m): array => $json($s, ['error' => ['code' => $c, 'message' => $m, 'retryable' => false]]);
+        // Emit a {status,body} result (from a sub-handler) as a router response.
+        $emit = static fn(array $r): array => $json((int) $r['status'], $r['body']);
 
         if ($method === 'OPTIONS') {
             return ['status' => 204, 'headers' => $cors, 'body' => null];
@@ -281,6 +283,28 @@ final class Ai2Web_Plugin
             $action = ($cm[2] ?? '') !== '' ? $cm[2] : null;
             $r = Ai2Web_ACP::dispatch($method, $id, $action, is_array($body) ? $body : []);
             return ['status' => $r['status'], 'headers' => array_merge(['content-type' => 'application/json; charset=utf-8'], $cors, $r['headers'] ?? []), 'body' => $r['body']];
+        }
+        // AP2 (Agent Payments Protocol) merchant surface.
+        if (strncmp($path, '/ai2w/ap2', 9) === 0) {
+            if (!Ai2Web_AP2::enabled()) {
+                return $error(404, 'not_found', 'AP2 is not enabled.');
+            }
+            if ($path === '/ai2w/ap2/agent-card') {
+                return $method === 'GET' ? $json(200, Ai2Web_AP2::agent_card()) : $error(405, 'invalid_request', 'Use GET for the agent card.');
+            }
+            if ($path === '/ai2w/ap2/jwks') {
+                return $method === 'GET' ? $json(200, Ai2Web_AP2::jwks()) : $error(405, 'invalid_request', 'Use GET for the JWKS.');
+            }
+            if ($path === '/ai2w/ap2/cart') {
+                return $method === 'POST' ? $emit(Ai2Web_AP2::dispatch_cart(is_array($body) ? $body : [])) : $error(405, 'invalid_request', 'Use POST with an IntentMandate.');
+            }
+            if ($path === '/ai2w/ap2/payment') {
+                return $method === 'POST' ? $emit(Ai2Web_AP2::dispatch_payment(is_array($body) ? $body : [])) : $error(405, 'invalid_request', 'Use POST with a PaymentMandate.');
+            }
+            if ($path === '/ai2w/ap2') {
+                return $method === 'POST' ? $emit(Ai2Web_AP2::dispatch_a2a(is_array($body) ? $body : [])) : $error(405, 'invalid_request', 'Use POST (A2A JSON-RPC message/send).');
+            }
+            return $error(404, 'invalid_request', "No AP2 route for $path.");
         }
         return $error(404, 'invalid_request', "No AI2Web route for $path.");
     }
