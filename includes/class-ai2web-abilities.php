@@ -38,9 +38,17 @@ final class Ai2Web_Abilities
         // WooCommerce, and its `woocommerce` category, are active).
         $form_actions = method_exists('Ai2Web_Forms', 'action_names') ? Ai2Web_Forms::action_names() : [];
 
+        // WooCommerce 10.9+ ships canonical product/order abilities (woocommerce/products-query,
+        // orders-query, ...) into this same registry / MCP Adapter. On that authenticated,
+        // merchant-facing surface our read actions would list as confusing near-duplicates, so we
+        // skip the ones WooCommerce now covers canonically. They stay fully available on our
+        // anonymous, ownership-gated /ai2w/mcp surface (the customer-facing layer WooCommerce's
+        // abilities do not provide), which never touches this registry.
+        $superseded = self::superseded_by_woocommerce();
+
         foreach (Ai2Web_Actions::declared() as $a) {
             $action = (string) ($a['name'] ?? '');
-            if ($action === '') {
+            if ($action === '' || isset($superseded[$action])) {
                 continue;
             }
             $approval = !empty($a['requires_user_approval']);
@@ -70,5 +78,30 @@ final class Ai2Web_Abilities
                 ],
             ]);
         }
+    }
+
+    /**
+     * Our read actions that WooCommerce 10.9+ exposes canonically, so we do not register a
+     * near-duplicate on the WordPress-native Abilities surface (the WP MCP Adapter / AI Client).
+     * Only reads are deferred: our request-only writes (returns, refunds, checkout, contact) and
+     * our custom reads (return status) have no WooCommerce canonical equivalent and are kept.
+     * Empty when WooCommerce's canonical abilities are absent, or when a site opts back in.
+     *
+     * @return array<string,string> our action name => the WooCommerce ability it defers to
+     */
+    private static function superseded_by_woocommerce(): array
+    {
+        $map = [];
+        // WC 10.9 (June 2026) is the first release to ship the canonical product/order abilities.
+        if (defined('WC_VERSION') && version_compare((string) WC_VERSION, '10.9', '>=')) {
+            $map = [
+                'search_products' => 'woocommerce/products-query',
+                'check_stock'     => 'woocommerce/products-query',
+                'track_order'     => 'woocommerce/orders-query',
+            ];
+        }
+        // Return [] to list every ai2web/* ability alongside WooCommerce's canonical ones.
+        $out = apply_filters('ai2web_abilities_superseded_by_woocommerce', $map);
+        return is_array($out) ? $out : [];
     }
 }

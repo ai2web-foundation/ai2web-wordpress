@@ -118,6 +118,9 @@ They are alternative projections of the same manifest, for agents that read thos
 = What are the WordPress Abilities it registers? =
 On WordPress 6.9+/7.0, the plugin registers its actions with the native Abilities API so WordPress's own AI Client and MCP Adapter can use them. This surface is authenticated (gated by WordPress permissions), separate from the public `/ai2w` surface.
 
+= Does it clash with WooCommerce 10.9's own agent abilities? =
+No. WooCommerce 10.9+ ships its own canonical abilities (product and order query, create, update, etc.) into the same Abilities API. Those are merchant-facing and authenticated, for a store operator driving their shop from an AI client. AI2Web's actions are the opposite: customer-facing, anonymous, and ownership-gated (an external shopper's agent with no WordPress account), served from `/ai2w/mcp` and REST. To keep the native, authenticated surface tidy, AI2Web stops registering its read actions that WooCommerce now covers canonically (`search_products`, `check_stock`, `track_order`) as WordPress abilities when WooCommerce 10.9+ is active. They stay available on the public `/ai2w` surface, which WooCommerce's abilities do not serve.
+
 = Do I need OpenAI/Anthropic to use AI2Web? =
 No. The manifest, feeds and endpoints are useful today, and the MCP endpoint works with current assistant connectors without any AI key on your side.
 
@@ -137,6 +140,7 @@ Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2
 
 = 0.4.0 =
 * New **analytics** (RFC-0016 parity with the reference server): personal-data-free, server-side interaction events stored in a local plugin table and fired as an `ai2web_event` action so operators can forward them anywhere. Records discovery, query, and action events, including query "misses" (the demand signal a read-only crawl cannot produce). Filters are sanitised to non-identifying scalars, the agent identity is coarse (User-Agent only, never an end-user), rows auto-prune after 90 days, and the whole thing is filterable off via `ai2web_analytics_enabled`.
+* **WooCommerce 10.9+ interop**: WooCommerce 10.9 ships its own canonical product/order abilities into WordPress's Abilities API and MCP Adapter. To avoid listing near-duplicates next to them on that authenticated, merchant-facing surface, AI2Web no longer registers its `search_products`, `check_stock`, or `track_order` reads as WordPress abilities when WooCommerce 10.9+ is active (WooCommerce's `products-query` / `orders-query` cover them). Every AI2Web action, including those three, remains fully available on the anonymous, ownership-gated `/ai2w/mcp` and REST surfaces, which WooCommerce's abilities do not provide. Filterable via `ai2web_abilities_superseded_by_woocommerce`.
 * **Hardened OAuth2 server**: least-privilege bearer authentication, so a token authenticates a request without elevating its WordPress capabilities.
 * **Strict PKCE and scope validation** on the authorize endpoint: the `code_challenge` and requested scopes are validated up front and rejected if malformed.
 
