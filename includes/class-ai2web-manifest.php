@@ -63,6 +63,18 @@ final class Ai2Web_Manifest
             $transports['mcp'] = ['enabled' => true, 'endpoint' => '/ai2w/mcp'];
         }
 
+        // NLWeb (nlweb.ai) projection: a natural-language `ask` query over the site's content.
+        // AI2Web convention (NLWeb defines no discovery file), so agents that speak NLWeb can use it.
+        if (Ai2Web_Nlweb::enabled()) {
+            $transports['nlweb'] = [
+                'enabled' => true,
+                'version' => Ai2Web_Nlweb::VERSION,
+                'ask' => '/ai2w/nlweb/ask',
+                'modes' => ['list'],
+            ];
+            $capabilities['conversational'] = ['enabled' => true, 'endpoint' => '/ai2w/nlweb/ask'];
+        }
+
         $actions = Ai2Web_Actions::declared();
         if (!empty($actions)) {
             $capabilities['actions'] = ['enabled' => true, 'endpoint' => '/ai2w/actions'];

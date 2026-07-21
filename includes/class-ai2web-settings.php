@@ -25,6 +25,7 @@ final class Ai2Web_Settings
             'agent_service' => true,     // /ai2w/agent, answered by WordPress 7.0's AI Client (if a provider is connected)
             'oauth2' => true,            // OAuth2 authorization-code + PKCE for authenticated agent access
             'mcp_enabled' => true,       // expose the /ai2w/mcp endpoint for AI connectors
+            'nlweb' => true,             // NLWeb (nlweb.ai) projection: a natural-language /ai2w/nlweb/ask over content
         ];
     }
 
@@ -60,6 +61,7 @@ final class Ai2Web_Settings
             'agent_service' => !empty($input['agent_service']),
             'oauth2' => !empty($input['oauth2']),
             'mcp_enabled' => !empty($input['mcp_enabled']),
+            'nlweb' => !empty($input['nlweb']),
         ];
     }
 }

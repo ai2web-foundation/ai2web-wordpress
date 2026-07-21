@@ -114,6 +114,8 @@ final class Ai2Web_Admin
 
         self::checkbox_row($opt, 'mcp_enabled', !empty($s['mcp_enabled']), __('MCP endpoint', 'ai2web'), __('Expose /ai2w/mcp so AI assistants (Claude, ChatGPT connectors) can use your actions directly.', 'ai2web'));
 
+        self::checkbox_row($opt, 'nlweb', !empty($s['nlweb']), __('NLWeb endpoint', 'ai2web'), __('Expose /ai2w/nlweb/ask, an NLWeb-compatible (nlweb.ai) natural-language query over your posts, pages and products, so agents that speak NLWeb can search your site. Returns schema.org results.', 'ai2web'));
+
         self::checkbox_row($opt, 'agent_service', !empty($s['agent_service']), __('Agent service', 'ai2web'), __('Expose /ai2w/agent, a natural-language endpoint answered by WordPress\'s built-in AI Client using the provider you connected. It only appears in the manifest when a provider is available.', 'ai2web'));
         if (!function_exists('wp_ai_client_prompt')) {
             echo '<tr><th scope="row"></th><td><p class="description">' . esc_html__('The WordPress AI Client was not detected (needs WordPress 7.0+ with a connected provider), so the agent service is not exposed yet.', 'ai2web') . '</p></td></tr>';

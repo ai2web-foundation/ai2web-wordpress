@@ -4,7 +4,7 @@ Tags: ai, agents, mcp, woocommerce, chatgpt
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 0.4.0
+Stable tag: 0.4.1
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -164,6 +164,9 @@ Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2
 
 == Changelog ==
 
+= 0.4.1 =
+* New **NLWeb (nlweb.ai) endpoint**: exposes `/ai2w/nlweb/ask`, an NLWeb-compatible natural-language query over your posts, pages and WooCommerce products, returning schema.org-style results. Agents that speak NLWeb can now search your site through AI2Web, and the surface is advertised in the manifest under `transports.nlweb` (plus a `conversational` capability). It is a keyword projection over WordPress search, not NLWeb's own semantic engine. Toggle under Settings -> AI2Web.
+
 = 0.4.0 =
 * New **Agent Sales dashboard** (Settings -> AI2Web Agent Sales): see what AI agents are doing on your store, computed entirely from local data. Shows agent-driven revenue, order count, average order value and pending value over a selectable window, a breakdown by protocol (agent checkout / ACP / AP2), a recent agent-orders table, and engagement from the local events table (discovery hits, queries, query "misses" that reveal unmet demand, and action calls). Nothing is sent to any external service.
 * New **ACP (Agentic Commerce Protocol) checkout** (spec 2026-04-17): a customer-facing agentic checkout so a shopper's agent (for example ChatGPT Instant Checkout) can run a full cart -> shipping -> coupon -> pay flow against a real WooCommerce cart. Adds checkout sessions at `/ai2w/acp/checkout_sessions` (create, retrieve, update, complete, cancel), a product feed at `/ai2w/acp/feed`, and the five matching MCP tools (create/get/update/complete/cancel_checkout_session). Live WooCommerce pricing, shipping rates, coupons and tax are projected as ACP totals in minor units. Includes a **Stripe Shared Payment Token handler**: when a Stripe secret key is available (an `AI2WEB_STRIPE_SECRET_KEY` constant or the WooCommerce Stripe gateway), completing a checkout charges the buyer in-agent by confirming a Stripe PaymentIntent; with no key it degrades safely to a pending order plus that order's secure pay link, so the agent never handles card data. Toggle under Settings -> AI2Web (requires Agent checkout).
@@ -195,6 +198,9 @@ Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2
 * Initial draft: manifest, discovery, content/search/products/events, WooCommerce + form detection, negotiation.
 
 == Upgrade Notice ==
+
+= 0.4.1 =
+Adds an NLWeb-compatible `/ai2w/nlweb/ask` endpoint so agents that speak NLWeb (nlweb.ai) can query your content and catalogue. Backward compatible; toggle under Settings -> AI2Web.
 
 = 0.4.0 =
 Adds ACP (Agentic Commerce Protocol) customer checkout with a Stripe Shared Payment Token handler, an opt-in AP2 (Agent Payments Protocol) merchant surface, richer product/variation data, privacy-preserving analytics (a new local events table, created on activation), and hardens the OAuth2 server. Backward compatible; enable ACP and AP2 under Settings -> AI2Web.

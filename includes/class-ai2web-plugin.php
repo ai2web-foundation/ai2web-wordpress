@@ -292,6 +292,17 @@ final class Ai2Web_Plugin
             $r = Ai2Web_ACP::dispatch($method, $id, $action, is_array($body) ? $body : []);
             return ['status' => $r['status'], 'headers' => array_merge(['content-type' => 'application/json; charset=utf-8'], $cors, $r['headers'] ?? []), 'body' => $r['body']];
         }
+        // NLWeb (nlweb.ai) projection: a natural-language `ask` query over the site's content.
+        if ($path === '/ai2w/nlweb/ask') {
+            if (!Ai2Web_Nlweb::enabled()) {
+                return $error(404, 'not_found', 'NLWeb is not enabled.');
+            }
+            if ($method !== 'GET' && $method !== 'POST') {
+                return $error(405, 'invalid_request', 'Use GET or POST for the NLWeb ask endpoint.');
+            }
+            $r = Ai2Web_Nlweb::ask($method, is_array($body) ? $body : []);
+            return $json($r['status'], $r['body']);
+        }
         // AP2 (Agent Payments Protocol) merchant surface.
         if (strncmp($path, '/ai2w/ap2', 9) === 0) {
             if (!Ai2Web_AP2::enabled()) {
