@@ -9,6 +9,8 @@
 
 # AI2Web for WordPress
 
+[![AI2Web on Launchpadly - Product of the Week (Gold)](https://launchpadly.co/embed/badges/startup/ai2web.svg?variant=product-week-gold)](https://launchpadly.co/startup/ai2web?ref=badge)
+
 [![CI](https://github.com/ai2web-foundation/ai2web-wordpress/actions/workflows/ci.yml/badge.svg)](https://github.com/ai2web-foundation/ai2web-wordpress/actions/workflows/ci.yml)
 
 Make your WordPress site AI-native. This plugin publishes an [AI2Web](https://ai2web.dev) (`ai2w`) capability manifest and live, backend-first endpoints, so AI agents can **discover, understand and act on your site** across MCP, ACP, REST and more. It auto-integrates WooCommerce and popular form plugins, with no theme changes and no frontend scraping.

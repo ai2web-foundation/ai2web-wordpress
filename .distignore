@@ -1,0 +1,19 @@
+# Files and directories NOT shipped to WordPress.org (used by the deploy workflow and by anyone
+# building a release). The plugin runtime is only ai2web.php, includes/, readme.txt and LICENSE.
+/.git
+/.github
+/.wordpress-org
+/.gitignore
+/.gitattributes
+/.distignore
+/bin
+/tests
+/README.md
+/composer.json
+/composer.lock
+/vendor
+/node_modules
+*.zip
+*.log
+.DS_Store
+.phpunit.result.cache

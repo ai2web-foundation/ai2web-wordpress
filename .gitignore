@@ -3,3 +3,7 @@ composer.lock
 .phpunit.result.cache
 *.log
 .DS_Store
+
+# Build artifact from bin/build-zip.sh
+*.zip
+bin/
