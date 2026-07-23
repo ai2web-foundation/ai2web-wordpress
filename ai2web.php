@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name:       AI2Web
+ * Plugin Name:       AI2Web - MCP, ACP, AP2 & NLWeb for AI Agents
  * Plugin URI:        https://ai2web.dev
  * Description:       Make your website AI-native. Exposes an AI2Web (ai2w) capability manifest, REST and MCP endpoints so AI agents can discover, understand and act on your site. Auto-integrates WooCommerce (product search, order tracking, return/refund requests) and popular form plugins.
- * Version:           0.4.1
+ * Version:           0.4.2
  * Requires PHP:      8.0
  * Requires at least: 6.0
  * Author:            AI2Web Foundation
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('AI2WEB_VERSION', '0.4.1');
+define('AI2WEB_VERSION', '0.4.2');
 define('AI2WEB_DIR', plugin_dir_path(__FILE__));
 
 require_once AI2WEB_DIR . 'includes/class-ai2web-settings.php';

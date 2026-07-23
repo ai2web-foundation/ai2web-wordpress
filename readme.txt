@@ -1,10 +1,10 @@
-=== AI2Web ===
+=== AI2Web - MCP, ACP, AP2 & NLWeb for AI Agents ===
 Contributors: rolandfarkas, ai2webfoundation
 Tags: ai, agents, mcp, woocommerce, chatgpt
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 0.4.1
+Stable tag: 0.4.2
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -179,6 +179,12 @@ Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2
 
 == Changelog ==
 
+= 0.4.2 =
+* **Compatibility**: the plugin no longer relies on `array_is_list()`, so it runs on its declared minimums (PHP 8.0, WordPress 6.0) rather than needing PHP 8.1 / WordPress 6.5.
+* The optional **WordPress 6.9 Abilities API** and **WordPress 7.0 AI Client** integrations are now explicitly guarded, so they are never called on cores that do not provide them.
+* Housekeeping: added a `License URI` header, escaped an admin readiness glyph, trimmed an over-long upgrade notice, and documented the OAuth redirect and table-name query annotations.
+* No configuration changes; nothing to do after updating.
+
 = 0.4.1 =
 * New **NLWeb (nlweb.ai) endpoint**: exposes `/ai2w/nlweb/ask`, an NLWeb-compatible natural-language query over your posts, pages and WooCommerce products, returning schema.org-style results. Agents that speak NLWeb can now search your site through AI2Web, and the surface is advertised in the manifest under `transports.nlweb` (plus a `conversational` capability). It is a keyword projection over WordPress search, not NLWeb's own semantic engine. Toggle under Settings -> AI2Web.
 
@@ -213,6 +219,9 @@ Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2
 * Initial draft: manifest, discovery, content/search/products/events, WooCommerce + form detection, negotiation.
 
 == Upgrade Notice ==
+
+= 0.4.2 =
+Compatibility and housekeeping release: the plugin now runs cleanly on its declared minimums (PHP 8.0, WordPress 6.0), and the optional Abilities / AI Client integrations are explicitly guarded. No configuration changes.
 
 = 0.4.1 =
 Adds an NLWeb-compatible `/ai2w/nlweb/ask` endpoint so agents that speak NLWeb (nlweb.ai) can query your content and catalogue. Backward compatible; toggle under Settings -> AI2Web.

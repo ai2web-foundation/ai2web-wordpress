@@ -1,0 +1,47 @@
+name: Deploy to WordPress.org
+
+# Publishes a release to the WordPress.org plugin directory (SVN) when a version tag is pushed.
+# What ships is controlled by .distignore, so dev files (.github, bin, tests, composer.json,
+# phpcs.xml.dist, README.md) never reach the directory.
+#
+# Requires two repository secrets (Settings -> Secrets and variables -> Actions):
+#   SVN_USERNAME - your WordPress.org username
+#   SVN_PASSWORD - your WordPress.org password
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Publish to wordpress.org
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tags are v-prefixed (v0.4.1); WordPress.org expects a bare version (0.4.1) that matches
+      # the readme "Stable tag" and the plugin header "Version".
+      - name: Resolve version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # A mismatch here is the classic way to ship a release nobody can install, so fail loudly.
+      - name: Verify Stable tag and plugin Version match the git tag
+        run: |
+          V='${{ steps.ver.outputs.version }}'
+          STABLE=$(sed -n 's/^Stable tag:[[:space:]]*\([0-9.]\{1,\}\).*/\1/p' readme.txt | head -1)
+          HEADER=$(sed -n 's/^[[:space:]]*\*[[:space:]]*Version:[[:space:]]*\([0-9.]\{1,\}\).*/\1/p' ai2web.php | head -1)
+          echo "git tag: $V | readme Stable tag: $STABLE | plugin Version: $HEADER"
+          [ "$V" = "$STABLE" ] || { echo "::error::readme Stable tag ($STABLE) does not match the tag ($V)"; exit 1; }
+          [ "$V" = "$HEADER" ] || { echo "::error::plugin header Version ($HEADER) does not match the tag ($V)"; exit 1; }
+
+      - name: WordPress.org plugin deploy
+        uses: 10up/action-wordpress-plugin-deploy@stable
+        env:
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+          # The wordpress.org slug is "ai2web" - it is NOT the repository name (ai2web-wordpress).
+          SLUG: ai2web
+          VERSION: ${{ steps.ver.outputs.version }}
+          ASSETS_DIR: .wordpress-org
