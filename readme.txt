@@ -4,7 +4,7 @@ Tags: ai, agents, mcp, woocommerce, chatgpt
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 0.4.2
+Stable tag: 0.4.3
 License: MIT
 License URI: https://opensource.org/licenses/MIT
 
@@ -179,6 +179,12 @@ Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2
 
 == Changelog ==
 
+= 0.4.3 =
+* **OAuth Protected Resource (RFC 9728)**: new `/.well-known/oauth-protected-resource` document telling agents (and MCP clients) which authorization server guards the AI2Web endpoints. Served only when OAuth2 is enabled.
+* **Content Signals + robots.txt projection**: the `usage_policy` you already declare in the manifest is now projected into robots.txt as a `Content-Signal` directive and sent as a `Content-Signal` response header, so crawlers can actually read your stated preferences. Additive only - your existing robots.txt rules are never modified - and filterable via `ai2web_project_robots_txt`.
+* **Discovery `Link` header**: every front-end response advertises the manifest via `Link: <.../ai2w>; rel="ai2w"` (RFC 8288), so non-HTML clients discover it without parsing a page. Filterable via `ai2web_send_discovery_headers`.
+* **Markdown for agents**: `/ai2w/content` returns Markdown when the request sends `Accept: text/markdown` (with `Vary: accept`); JSON remains the default.
+
 = 0.4.2 =
 * **Compatibility**: the plugin no longer relies on `array_is_list()`, so it runs on its declared minimums (PHP 8.0, WordPress 6.0) rather than needing PHP 8.1 / WordPress 6.5.
 * The optional **WordPress 6.9 Abilities API** and **WordPress 7.0 AI Client** integrations are now explicitly guarded, so they are never called on cores that do not provide them.
@@ -219,6 +225,9 @@ Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2
 * Initial draft: manifest, discovery, content/search/products/events, WooCommerce + form detection, negotiation.
 
 == Upgrade Notice ==
+
+= 0.4.3 =
+Adds OAuth Protected Resource metadata (RFC 9728), a discovery Link header, Markdown responses for agents, and projects your declared usage policy into robots.txt and a Content-Signal header. Additive and filterable; your robots.txt rules are never changed.
 
 = 0.4.2 =
 Compatibility and housekeeping release: the plugin now runs cleanly on its declared minimums (PHP 8.0, WordPress 6.0), and the optional Abilities / AI Client integrations are explicitly guarded. No configuration changes.

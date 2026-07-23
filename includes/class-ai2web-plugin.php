@@ -15,6 +15,9 @@ final class Ai2Web_Plugin
         add_action('init', [self::class, 'add_rewrite_rules']);
         add_action('parse_request', [$this, 'maybe_handle']);
         add_action('wp_head', [self::class, 'discovery_link']);
+        // Project discovery + usage policy onto the surfaces crawlers already read.
+        add_action('send_headers', [self::class, 'send_discovery_headers']);
+        add_filter('robots_txt', [self::class, 'robots_txt'], 10, 2);
     }
 
     /**
@@ -28,6 +31,52 @@ final class Ai2Web_Plugin
             return;
         }
         echo '<link rel="ai2w" href="' . esc_url(home_url('/ai2w')) . '">' . "\n";
+    }
+
+    /**
+     * Advertise the manifest via an HTTP `Link` header (so non-HTML clients discover it without
+     * parsing a page) and carry the declared usage policy as a Content-Signal header. Uses the
+     * cheap policy stub, never a full manifest build, because this runs on every front-end
+     * request. Both are filterable off.
+     */
+    public static function send_discovery_headers(): void
+    {
+        if (is_admin() || headers_sent() || !Ai2Web_Settings::get('enabled', true)) {
+            return;
+        }
+        if (!apply_filters('ai2web_send_discovery_headers', true)) {
+            return;
+        }
+        $stub = Ai2Web_Manifest::policy_stub();
+        header('Link: ' . Ai2Web_Export::discovery_link_header($stub), false);
+        $signals = Ai2Web_Export::content_signals($stub);
+        if ($signals !== null) {
+            header('Content-Signal: ' . $signals);
+        }
+    }
+
+    /**
+     * Append the AI2Web usage-policy projection to robots.txt. Additive only: the site's own
+     * rules are never touched, and the whole projection can be turned off with the filter.
+     *
+     * @param string $output
+     * @param mixed  $public
+     */
+    public static function robots_txt($output, $public): string
+    {
+        $output = (string) $output;
+        if (!Ai2Web_Settings::get('enabled', true) || !apply_filters('ai2web_project_robots_txt', true)) {
+            return $output;
+        }
+        return rtrim($output, "\n") . "\n\n" . Ai2Web_Export::robots_txt(Ai2Web_Manifest::policy_stub());
+    }
+
+    /** True when the caller explicitly prefers Markdown over JSON. */
+    private static function wants_markdown(): bool
+    {
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- content negotiation on a public read.
+        $accept = isset($_SERVER['HTTP_ACCEPT']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_ACCEPT'])) : '';
+        return $accept !== '' && stripos($accept, 'text/markdown') !== false;
     }
 
     public static function add_rewrite_rules(): void
@@ -70,6 +119,7 @@ final class Ai2Web_Plugin
             || $path === '/agent.json'
             || $path === '/llms.txt'
             || $path === '/.well-known/oauth-authorization-server'
+            || $path === '/.well-known/oauth-protected-resource'
             || ($path === '/.well-known/agent-card.json' && Ai2Web_AP2::enabled())
             || strncmp($path, '/ai2w/', 6) === 0;
         if (!$known) {
@@ -134,6 +184,17 @@ final class Ai2Web_Plugin
             header('content-type: text/plain; charset=utf-8');
             header('access-control-allow-origin: *');
             echo Ai2Web_Export::llms_txt($manifest); // phpcs:ignore WordPress.Security.EscapeOutput
+            exit;
+        }
+
+        // Markdown content negotiation: agents that ask for text/markdown get the content
+        // projection as Markdown instead of JSON. `vary: accept` keeps caches honest.
+        if ($path === '/ai2w/content' && $method === 'GET' && self::wants_markdown()) {
+            status_header(200);
+            header('content-type: text/markdown; charset=utf-8');
+            header('access-control-allow-origin: *');
+            header('vary: accept');
+            echo Ai2Web_Export::content_markdown(Ai2Web_Manifest::content(), $manifest); // phpcs:ignore WordPress.Security.EscapeOutput -- text/markdown projection of public content, not HTML.
             exit;
         }
 
@@ -230,6 +291,13 @@ final class Ai2Web_Plugin
             return Ai2Web_OAuth::available()
                 ? $json(200, Ai2Web_OAuth::metadata())
                 : $error(404, 'not_found', 'OAuth is not enabled.');
+        }
+        // RFC 9728: tells an MCP client which authorization server guards this resource.
+        if ($path === '/.well-known/oauth-protected-resource') {
+            $doc = Ai2Web_Export::oauth_protected_resource($manifest);
+            return $doc === null
+                ? $error(404, 'not_found', 'OAuth is not enabled.')
+                : $json(200, $doc);
         }
         if ($path === '/.well-known/agent.json' || $path === '/agent.json') {
             if ($method !== 'GET') {

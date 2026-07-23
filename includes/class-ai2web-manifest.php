@@ -143,10 +143,7 @@ final class Ai2Web_Manifest
         ]);
 
         // Usage policy: protective defaults; site owners can relax them via the filter.
-        $manifest['usage_policy'] = apply_filters('ai2web_usage_policy', [
-            'bulk_extraction' => false,
-            'model_training' => false,
-        ]);
+        $manifest['usage_policy'] = self::usage_policy();
 
         // Legal is opt-in: we never assert a jurisdiction or compliance the owner has not declared.
         $legal = apply_filters('ai2web_legal', []);
@@ -175,6 +172,28 @@ final class Ai2Web_Manifest
          * @param array<string,mixed> $manifest
          */
         return apply_filters('ai2web_manifest', $manifest);
+    }
+
+    /**
+     * The declared acceptable-use policy. Exposed separately from build() so hot paths
+     * (robots.txt, response headers) can project it without assembling the whole manifest,
+     * and so the defaults cannot drift between the two.
+     *
+     * @return array<string,mixed>
+     */
+    public static function usage_policy(): array
+    {
+        $p = apply_filters('ai2web_usage_policy', [
+            'bulk_extraction' => false,
+            'model_training' => false,
+        ]);
+        return is_array($p) ? $p : [];
+    }
+
+    /** A minimal manifest stub (site URL + usage policy) for the cheap policy projections. */
+    public static function policy_stub(): array
+    {
+        return ['site' => ['url' => home_url('/')], 'usage_policy' => self::usage_policy()];
     }
 
     /** @return array<int,array<string,mixed>> Recent content as structured items. */
