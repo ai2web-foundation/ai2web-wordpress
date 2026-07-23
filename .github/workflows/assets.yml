@@ -19,6 +19,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need tags for the guard below
+
+      # This job also syncs readme.txt, and wordpress.org decides which version to serve from the
+      # "Stable tag" in trunk/readme.txt. Pushing a readme whose Stable tag has not been released
+      # would point the directory at a version that does not exist, breaking downloads.
+      - name: Guard - Stable tag must already be released
+        run: |
+          STABLE=$(sed -n 's/^Stable tag:[[:space:]]*\([0-9.]\{1,\}\).*/\1/p' readme.txt | head -1)
+          if ! git rev-parse -q --verify "refs/tags/v$STABLE" >/dev/null; then
+            echo "::error::readme Stable tag ($STABLE) has no matching git tag (v$STABLE). Tag and deploy that version first."
+            exit 1
+          fi
+          echo "Stable tag $STABLE is released - safe to sync assets and readme."
 
       - name: WordPress.org assets update
         uses: 10up/action-wordpress-plugin-asset-update@stable
@@ -28,3 +42,6 @@ jobs:
           # The wordpress.org slug is "ai2web" - it is NOT the repository name (ai2web-wordpress).
           SLUG: ai2web
           ASSETS_DIR: .wordpress-org
+          # main normally sits ahead of the last released tag, so trunk will legitimately differ.
+          # Without this the action aborts with "Other files have been modified".
+          IGNORE_OTHER_FILES: true
