@@ -596,6 +596,7 @@ final class Ai2Web_AP2
 
     private static function b64url(string $bin): string
     {
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- base64url encoding of a JWS signing input / signature / hash, not obfuscation.
         return rtrim(strtr(base64_encode($bin), '+/', '-_'), '=');
     }
 
@@ -630,7 +631,8 @@ final class Ai2Web_AP2
             $data = (array) $data;
         }
         if (is_array($data)) {
-            if (array_is_list($data)) {
+            // array_is_list() is PHP 8.1+/WP 6.5+; use a version-safe equivalent for wider support.
+            if ($data === array_values($data)) {
                 return '[' . implode(',', array_map([self::class, 'canonical'], $data)) . ']';
             }
             $keys = array_map('strval', array_keys($data));

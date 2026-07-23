@@ -104,7 +104,9 @@ final class Ai2Web_Forms
             wp_specialchars_decode(get_bloginfo('name'), ENT_QUOTES)
         );
         $lines = [
+            /* translators: %s: sender's name */
             sprintf(__('Name: %s', 'ai2web'), $from_name !== '' ? $from_name : __('(not given)', 'ai2web')),
+            /* translators: %s: sender's email address */
             sprintf(__('Email: %s', 'ai2web'), $email),
             '',
             $message,

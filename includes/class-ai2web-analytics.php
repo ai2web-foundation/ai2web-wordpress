@@ -103,7 +103,7 @@ final class Ai2Web_Analytics
         // Opportunistic retention (RFC-0009): prune old rows ~1% of writes.
         if (wp_rand(1, 100) === 1) {
             $cutoff = gmdate('Y-m-d H:i:s', time() - self::RETAIN_DAYS * DAY_IN_SECONDS);
-            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $t is $wpdb->prefix . a constant table name (not user input); the value is prepared.
             $wpdb->query($wpdb->prepare("DELETE FROM {$t} WHERE ts < %s", $cutoff));
         }
     }
@@ -144,7 +144,8 @@ final class Ai2Web_Analytics
             if (isset($body['count']) && is_numeric($body['count'])) {
                 return (int) $body['count'] === 0;
             }
-            if (array_is_list($body)) {
+            // array_is_list() is PHP 8.1+/WP 6.5+; use a version-safe equivalent for wider support.
+            if ($body === array_values($body)) {
                 return count($body) === 0;
             }
         }

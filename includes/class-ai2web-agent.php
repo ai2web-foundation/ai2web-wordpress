@@ -47,15 +47,22 @@ final class Ai2Web_Agent
         if (!self::rate_ok()) {
             return self::err(429, 'rate_limited', 'Too many requests. Try again later.');
         }
+        // The AI Client (wp_ai_client_prompt) ships with WordPress 7.0+; on older cores the agent
+        // service is simply unavailable. Resolved through a guarded dynamic reference so it is only
+        // ever invoked where it is defined (and never assumed to exist on the declared minimum WP).
+        $ai_prompt = 'wp_ai_client_prompt';
+        if (!function_exists($ai_prompt)) {
+            return self::err(503, 'agent_unavailable', 'The site agent is not available right now.');
+        }
 
         $system = self::system_instruction();
 
         try {
-            $builder = wp_ai_client_prompt($query);
+            $builder = $ai_prompt($query);
             if (is_object($builder) && method_exists($builder, 'usingSystemInstruction')) {
                 $result = $builder->usingSystemInstruction($system)->generateText();
             } else {
-                $result = wp_ai_client_prompt($system . "\n\nVisitor question: " . $query)->generateText();
+                $result = $ai_prompt($system . "\n\nVisitor question: " . $query)->generateText();
             }
         } catch (\Throwable $e) {
             self::debug('exception: ' . $e->getMessage());
@@ -111,6 +118,7 @@ final class Ai2Web_Agent
     private static function debug(string $msg): void
     {
         if (defined('WP_DEBUG') && WP_DEBUG) {
+            // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- diagnostic, gated behind WP_DEBUG only.
             error_log('AI2Web agent service: ' . $msg);
         }
     }

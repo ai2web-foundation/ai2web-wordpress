@@ -202,6 +202,7 @@ final class Ai2Web_ACP
         }
         self::apply_buyer($order, $buyer);
         if (isset($body['order_notes']) && is_string($body['order_notes']) && $body['order_notes'] !== '') {
+            /* translators: %s: free-text order note supplied by the buyer */
             $order->add_order_note(sprintf(__('AI2Web (ACP) buyer note: %s', 'ai2web'), sanitize_textarea_field($body['order_notes'])), true);
         }
         $order->calculate_totals();

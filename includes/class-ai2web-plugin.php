@@ -98,7 +98,10 @@ final class Ai2Web_Plugin
                 status_header(413);
                 wp_send_json(['error' => ['code' => 'payload_too_large', 'retryable' => false]], 413);
             }
-            $body = $raw ? json_decode($raw, true) : null;
+            // json_decode does not sanitize; recursively clean keys and scalar values before the
+            // body is routed or forwarded to action filters (ai2web_acp_*, ai2web_ap2_*). Well-formed
+            // JSON/base64url payloads (incl. signed AP2 mandates) pass through unchanged.
+            $body = $raw ? self::sanitize_body(json_decode($raw, true)) : null;
         }
 
         // MCP uses its own transport (SSE); it emits the response and exits.
@@ -153,18 +156,44 @@ final class Ai2Web_Plugin
         wp_send_json($res['body'], $res['status']);
     }
 
+    /**
+     * Recursively sanitize a decoded request body. Sanitizes string keys and scalar string values
+     * with sanitize_text_field; leaves ints, floats, bools and null untouched (so amounts and flags
+     * keep their type). Compact base64url tokens and signed mandates contain no tags/whitespace, so
+     * they are unchanged; if a signed field were tampered with HTML, sanitizing it makes the
+     * signature check fail, which is the correct outcome.
+     *
+     * @param mixed $data
+     * @return mixed
+     */
+    private static function sanitize_body(mixed $data): mixed
+    {
+        if (is_array($data)) {
+            $out = [];
+            foreach ($data as $k => $v) {
+                $key = is_string($k) ? sanitize_text_field($k) : $k;
+                $out[$key] = self::sanitize_body($v);
+            }
+            return $out;
+        }
+        if (is_string($data)) {
+            return sanitize_text_field($data);
+        }
+        return $data; // int, float, bool, null preserved as-is
+    }
+
     /** Extract a Bearer token from the Authorization header (handles Apache's redirect variant). */
     private static function bearer_token(): string
     {
         $header = '';
         if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
-            $header = (string) wp_unslash($_SERVER['HTTP_AUTHORIZATION']);
+            $header = sanitize_text_field(wp_unslash($_SERVER['HTTP_AUTHORIZATION']));
         } elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
-            $header = (string) wp_unslash($_SERVER['REDIRECT_HTTP_AUTHORIZATION']);
+            $header = sanitize_text_field(wp_unslash($_SERVER['REDIRECT_HTTP_AUTHORIZATION']));
         } elseif (function_exists('getallheaders')) {
             foreach ((array) getallheaders() as $k => $v) {
                 if (strtolower((string) $k) === 'authorization') {
-                    $header = (string) $v;
+                    $header = sanitize_text_field((string) $v);
                     break;
                 }
             }
@@ -229,9 +258,9 @@ final class Ai2Web_Plugin
             return $json(200, Ai2Web_Manifest::content());
         }
         if ($path === '/ai2w/search') {
-            $q = is_array($body) && isset($body['query'])
-                ? (string) $body['query']
-                : (isset($_GET['q']) ? sanitize_text_field(wp_unslash($_GET['q'])) : '');
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- public read-only search query, no state change.
+            $get_q = isset($_GET['q']) ? sanitize_text_field(wp_unslash($_GET['q'])) : '';
+            $q = is_array($body) && isset($body['query']) ? (string) $body['query'] : $get_q;
             return $json(200, Ai2Web_Manifest::search($q));
         }
         if ($path === '/ai2w/products') {
@@ -255,7 +284,7 @@ final class Ai2Web_Plugin
                 return $error(404, 'not_found', 'OAuth is not enabled.');
             }
             // Token endpoints are usually form-encoded; accept that or a JSON body.
-            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- OAuth token exchange is authenticated by the code + PKCE verifier, not a nonce.
+            // phpcs:disable WordPress.Security.NonceVerification -- OAuth token exchange is authenticated by the auth code + PKCE verifier, not a WP nonce.
             $src = (is_array($body) && !empty($body)) ? $body : $_POST;
             $input = [
                 'grant_type' => isset($src['grant_type']) ? sanitize_text_field(wp_unslash($src['grant_type'])) : '',
@@ -264,6 +293,7 @@ final class Ai2Web_Plugin
                 'code_verifier' => isset($src['code_verifier']) ? sanitize_text_field(wp_unslash($src['code_verifier'])) : '',
                 'client_id' => isset($src['client_id']) ? sanitize_text_field(wp_unslash($src['client_id'])) : '',
             ];
+            // phpcs:enable WordPress.Security.NonceVerification
             header('Cache-Control: no-store'); // OAuth2: token responses must not be cached
             header('Pragma: no-cache');
             $r = Ai2Web_OAuth::token($input);

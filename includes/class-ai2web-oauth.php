@@ -70,7 +70,7 @@ final class Ai2Web_OAuth
         if (!self::secure_context()) {
             self::html_error(__('OAuth requires a secure (HTTPS) connection.', 'ai2web'));
         }
-        // phpcs:disable WordPress.Security.NonceVerification.Recommended -- OAuth params, validated below; consent POST is nonce-checked.
+        // phpcs:disable WordPress.Security.NonceVerification -- OAuth authorization params; the consent POST is nonce-checked below (line ~124) and OAuth uses its own state/PKCE, not a WP nonce.
         $src = $method === 'POST' ? $_POST : $_GET;
         $get = static fn(string $k): string => isset($src[$k]) ? sanitize_text_field(wp_unslash($src[$k])) : '';
         $client_id     = $get('client_id');
@@ -143,7 +143,8 @@ final class Ai2Web_OAuth
             if ($state !== '') {
                 $params['state'] = $state;
             }
-            wp_redirect($redirect_uri . $sep . http_build_query($params)); // cross-origin callback: user-approved
+            // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- OAuth cross-origin callback to a redirect_uri already validated by valid_redirect(); exit() follows. wp_safe_redirect would block legitimate external clients.
+            wp_redirect($redirect_uri . $sep . http_build_query($params));
             exit;
         }
 
@@ -273,6 +274,7 @@ final class Ai2Web_OAuth
         if ($len < 43 || $len > 128) {
             return false;
         }
+        // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- base64url encoding of the PKCE S256 hash for comparison, not obfuscation.
         $computed = rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
         return hash_equals($challenge, $computed);
     }
@@ -284,6 +286,7 @@ final class Ai2Web_OAuth
         if ($state !== '') {
             $params['state'] = $state;
         }
+        // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- OAuth error redirect to a redirect_uri already validated by valid_redirect(); exit() follows. wp_safe_redirect would block legitimate external clients.
         wp_redirect($redirect_uri . $sep . http_build_query($params));
         exit;
     }

@@ -72,10 +72,10 @@ final class Ai2Web_Admin
         echo '</p>';
         echo '<ul style="margin:10px 0 0;columns:2;column-gap:28px">';
         foreach ($score['checks'] as $c) {
-            $mark = $c['ok'] ? '&#10003;' : '&#9888;';
+            $mark = $c['ok'] ? "\u{2713}" : "\u{26A0}"; // check mark / warning sign
             $color = $c['ok'] ? '#1f883d' : '#bf8700';
             echo '<li style="margin:3px 0;list-style:none">';
-            echo '<span style="color:' . esc_attr($color) . ';font-weight:700">' . $mark . '</span> ';
+            echo '<span style="color:' . esc_attr($color) . ';font-weight:700">' . esc_html($mark) . '</span> ';
             echo esc_html($c['label']);
             if (!$c['ok'] && $c['hint'] !== '') {
                 echo ' <span style="color:#888">- ' . esc_html($c['hint']) . '</span>';

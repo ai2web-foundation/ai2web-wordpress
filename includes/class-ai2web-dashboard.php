@@ -190,7 +190,7 @@ final class Ai2Web_Dashboard
             return;
         }
         $cutoff = gmdate('Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS);
-        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is $wpdb->prefix . a constant table name (not user input); the value is prepared.
         $rows = $wpdb->get_results($wpdb->prepare("SELECT type, result, COUNT(*) c FROM {$table} WHERE ts >= %s GROUP BY type, result", $cutoff), ARRAY_A);
         if (empty($rows)) {
             return;

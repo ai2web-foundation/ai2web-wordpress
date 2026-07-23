@@ -38,6 +38,7 @@ final class Ai2Web_MCP
             // Some clients probe with GET; there is no server-initiated stream here.
             status_header(405);
             header('content-type: application/json; charset=utf-8');
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON body (wp_json_encode), not HTML; escaping would corrupt it.
             echo wp_json_encode(['error' => ['code' => 'method_not_allowed', 'message' => 'Use POST for MCP.']]);
             exit;
         }
@@ -238,6 +239,7 @@ final class Ai2Web_MCP
         header('cache-control: no-cache');
         $json = wp_json_encode($payload, JSON_UNESCAPED_SLASHES);
         echo "event: message\n";
+        // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON-RPC payload (wp_json_encode) in an SSE data frame, not HTML.
         echo 'data: ' . ($json === false ? '{}' : $json) . "\n\n";
     }
 }

@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<ruleset name="AI2Web">
+    <description>
+        Security, i18n and PHP 8.0+ compatibility checks for the AI2Web plugin. This mirrors the
+        sniffs the WordPress.org review (Plugin Check) enforces - it deliberately does NOT include
+        WordPress-Core code-formatting rules (tabs, Yoda conditions, alignment), which are style,
+        not correctness. Run with `composer phpcs`.
+    </description>
+
+    <file>ai2web.php</file>
+    <file>includes/</file>
+
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+    <arg value="sp"/><!-- show sniff codes, show progress -->
+
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/tests/*</exclude-pattern>
+
+    <!-- Security + DB correctness: injection, escaping, nonces, prepared SQL. -->
+    <rule ref="WordPress.Security"/>
+    <rule ref="WordPress.DB"/>
+
+    <!-- Discouraged / development functions (base64, error_log, var_dump, ...). -->
+    <rule ref="WordPress.PHP.DiscouragedPHPFunctions"/>
+    <rule ref="WordPress.PHP.DevelopmentFunctions"/>
+
+    <!-- Internationalisation, pinned to the plugin's text domain (= the wordpress.org slug). -->
+    <rule ref="WordPress.WP.I18n">
+        <properties>
+            <property name="text_domain" type="array">
+                <element value="ai2web"/>
+            </property>
+        </properties>
+    </rule>
+
+    <!-- The lowest WordPress version the plugin declares (Requires at least). -->
+    <config name="minimum_wp_version" value="6.0"/>
+
+    <!-- PHP 8.0 and up must stay clean (matches the plugin's Requires PHP header). -->
+    <rule ref="PHPCompatibilityWP"/>
+    <config name="testVersion" value="8.0-"/>
+</ruleset>

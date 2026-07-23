@@ -29,7 +29,11 @@ final class Ai2Web_Abilities
 
     public static function register(): void
     {
-        if (!Ai2Web_Settings::get('enabled', true)) {
+        // wp_register_ability() ships with the Abilities API (WordPress 6.9+). The
+        // wp_abilities_api_init hook only fires when it is present; resolved through a guarded
+        // dynamic reference so it is only ever invoked where it is defined.
+        $register_ability = 'wp_register_ability';
+        if (!function_exists($register_ability) || !Ai2Web_Settings::get('enabled', true)) {
             return;
         }
 
@@ -53,7 +57,7 @@ final class Ai2Web_Abilities
             }
             $approval = !empty($a['requires_user_approval']);
             $risk = (string) ($a['risk'] ?? 'low');
-            wp_register_ability('ai2web/' . str_replace('_', '-', $action), [
+            $register_ability('ai2web/' . str_replace('_', '-', $action), [
                 'label' => ucwords(str_replace('_', ' ', $action)),
                 'description' => (string) ($a['description'] ?? ''),
                 'category' => in_array($action, $form_actions, true) ? 'content' : 'woocommerce',

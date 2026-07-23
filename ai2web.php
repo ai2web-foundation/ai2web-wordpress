@@ -8,6 +8,7 @@
  * Requires at least: 6.0
  * Author:            AI2Web Foundation
  * License:           MIT
+ * License URI:       https://opensource.org/licenses/MIT
  * Text Domain:       ai2web
  *
  * Describe your website once. AI2Web makes it understandable to every AI.

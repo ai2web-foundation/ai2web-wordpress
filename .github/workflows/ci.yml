@@ -17,3 +17,23 @@ jobs:
           php-version: ${{ matrix.php }}
       - name: Lint all PHP files
         run: find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 -P4 php -l
+
+  phpcs:
+    name: WPCS + PHPCS (security, i18n, PHP-compat)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          coverage: none
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ hashFiles('composer.json') }}
+          restore-keys: composer-
+      - name: Install linters (PHP_CodeSniffer + WPCS + PHPCompatibility)
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Run PHPCS (WordPress security + i18n + PHP 8.0+ compatibility)
+        run: composer phpcs

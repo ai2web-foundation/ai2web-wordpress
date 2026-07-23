@@ -106,6 +106,21 @@ Everything is generated from your live site and detected integrations, and the m
 * The WordPress Abilities surface requires an authenticated WordPress user; it is gated by WordPress's own permissions.
 * **OAuth2 (PKCE)** is served over HTTPS, uses S256, issues single-use short-lived codes, stores tokens hashed, and only issues them after a logged-in user approves on a consent screen. A bearer token authenticates a request but does not elevate its WordPress capabilities.
 
+== External services ==
+
+This plugin does not send any data to an external service by default. One optional feature relies on a third party:
+
+**Stripe** (agent-completed payments)
+
+When, and only when, you (a) enable ACP checkout, (b) enter your own Stripe secret key in Settings -> AI2Web, and (c) a shopper's agent completes an order using a delegated Stripe payment token, the plugin sends a single request to the Stripe API (`https://api.stripe.com/v1/payment_intents`) to charge that order. If you do not enter a Stripe key, no request is ever made and no data leaves your site.
+
+Data sent to Stripe with that request: the order amount and currency, an order description, the delegated payment token supplied by the agent, the order ID and checkout-session ID, and (if present) the customer's billing email as the receipt address. It is sent over HTTPS at the moment the agent completes payment. No data is sent at any other time.
+
+Stripe is a service provided by Stripe, Inc. Please review their terms and privacy policy:
+
+* Terms: https://stripe.com/legal/ssa
+* Privacy policy: https://stripe.com/privacy
+
 == Installation ==
 
 1. Upload the `ai2web` folder to `/wp-content/plugins/`, or install the zip from Plugins -> Add New -> Upload.
@@ -203,7 +218,7 @@ Use the `ai2web_manifest` filter, or the targeted `ai2web_support_contact`, `ai2
 Adds an NLWeb-compatible `/ai2w/nlweb/ask` endpoint so agents that speak NLWeb (nlweb.ai) can query your content and catalogue. Backward compatible; toggle under Settings -> AI2Web.
 
 = 0.4.0 =
-Adds ACP (Agentic Commerce Protocol) customer checkout with a Stripe Shared Payment Token handler, an opt-in AP2 (Agent Payments Protocol) merchant surface, richer product/variation data, privacy-preserving analytics (a new local events table, created on activation), and hardens the OAuth2 server. Backward compatible; enable ACP and AP2 under Settings -> AI2Web.
+Adds ACP (Agentic Commerce Protocol) checkout with a Stripe Shared Payment Token handler, an opt-in AP2 (Agent Payments Protocol) merchant surface, richer product data, and local privacy-preserving analytics (a new events table, created on activation). Backward compatible.
 
 = 0.3.0 =
 Adds agent checkout, llms.txt and agent.json surfaces, and WordPress 7.0 Abilities integration. Backward compatible; review Settings -> AI2Web to toggle the new agent checkout.
