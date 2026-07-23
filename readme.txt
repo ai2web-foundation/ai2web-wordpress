@@ -1,5 +1,5 @@
 === AI2Web - MCP, ACP, AP2 & NLWeb for AI Agents ===
-Contributors: rolandfarkas, ai2webfoundation
+Contributors: rolandfarkas
 Tags: ai, agents, mcp, woocommerce, chatgpt
 Requires at least: 6.0
 Tested up to: 7.0
